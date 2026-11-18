@@ -130,6 +130,7 @@ async def real_user_context(username: str) -> RunContext:
 
     issuer = f"{os.environ.get('KEYCLOAK_URL', 'http://localhost:8081')}/realms/halcyon"
     token = await keycloak_token_for(username, audience="mcp-analytics")
+    drafts_token = await keycloak_token_for(username, audience="mcp-drafts")
     principal = TokenValidator(
         issuer=issuer,
         audience="mcp-analytics",
@@ -139,5 +140,5 @@ async def real_user_context(username: str) -> RunContext:
         run_id=f"run-{username}",
         trace_id="trace-e2e",
         principal=principal,
-        upstream_tokens={"analytics": token},
+        upstream_tokens={"analytics": token, "drafts": drafts_token},
     )

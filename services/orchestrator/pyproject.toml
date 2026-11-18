@@ -11,8 +11,10 @@ dependencies = [
   "copilot-sql-verifier",
   "copilot-policy-gateway",
   "copilot-tracing",
+  "copilot-drafts",
   "copilot-query-api",
   "copilot-mcp-analytics",
+  "copilot-mcp-drafts",
   "httpx>=0.27",
   "httpx2",
   "langgraph>=0.2",
@@ -34,5 +36,7 @@ copilot-catalogue = { workspace = true }
 copilot-sql-verifier = { workspace = true }
 copilot-policy-gateway = { workspace = true }
 copilot-tracing = { workspace = true }
+copilot-drafts = { workspace = true }
+copilot-mcp-drafts = { workspace = true }
 copilot-query-api = { workspace = true }
 copilot-mcp-analytics = { workspace = true }

@@ -16,6 +16,10 @@ halcyon-world = { workspace = true }
 copilot-query-api = { workspace = true }
 copilot-evals = { workspace = true }
 copilot-models = { workspace = true }
+copilot-mcp-common = { workspace = true }
+copilot-mcp-drafts = { workspace = true }
+copilot-drafts = { workspace = true }
+copilot-approval = { workspace = true }
 copilot-tracing = { workspace = true }
 copilot-orchestrator = { workspace = true }
 copilot-catalogue = { workspace = true }
@@ -33,6 +37,10 @@ dev = [
   "copilot-query-api",
   "copilot-evals",
   "copilot-models",
+  "copilot-mcp-common",
+  "copilot-mcp-drafts",
+  "copilot-drafts",
+  "copilot-approval",
   "copilot-tracing",
   "copilot-orchestrator",
   "copilot-catalogue",
@@ -63,6 +71,8 @@ select = ["E", "F", "I", "B", "UP", "S", "SIM", "RUF"]
 "**/tests/**" = ["S101", "S105", "S106", "S608", "E501"]
 # Gold-set SQL is trusted text assembled from constants and world data, never user input.
 "data/eval-sets/src/**" = ["S608"]
+# The drafts repositories interpolate only a constant column list; every value is a parameter.
+"packages/drafts/src/**" = ["S608"]
 
 [tool.mypy]
 strict = true

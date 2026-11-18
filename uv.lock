@@ -10,12 +10,16 @@ resolution-markers = [
 [manifest]
 members = [
     "analytics-copilot",
+    "copilot-approval",
     "copilot-auth",
     "copilot-catalogue",
     "copilot-devtools",
+    "copilot-drafts",
     "copilot-eval-sets",
     "copilot-evals",
     "copilot-mcp-analytics",
+    "copilot-mcp-common",
+    "copilot-mcp-drafts",
     "copilot-models",
     "copilot-orchestrator",
     "copilot-policy-gateway",
@@ -33,12 +37,16 @@ source = { virtual = "." }
 
 [package.dev-dependencies]
 dev = [
+    { name = "copilot-approval" },
     { name = "copilot-auth" },
     { name = "copilot-catalogue" },
     { name = "copilot-devtools" },
+    { name = "copilot-drafts" },
     { name = "copilot-eval-sets" },
     { name = "copilot-evals" },
     { name = "copilot-mcp-analytics" },
+    { name = "copilot-mcp-common" },
+    { name = "copilot-mcp-drafts" },
     { name = "copilot-models" },
     { name = "copilot-orchestrator" },
     { name = "copilot-policy-gateway" },
@@ -61,12 +69,16 @@ dev = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "copilot-approval", editable = "services/approval" },
     { name = "copilot-auth", editable = "packages/auth" },
     { name = "copilot-catalogue", editable = "packages/catalogue" },
     { name = "copilot-devtools", editable = "packages/devtools" },
+    { name = "copilot-drafts", editable = "packages/drafts" },
     { name = "copilot-eval-sets", editable = "data/eval-sets" },
     { name = "copilot-evals", editable = "packages/evals" },
     { name = "copilot-mcp-analytics", editable = "mcp-servers/analytics" },
+    { name = "copilot-mcp-common", editable = "packages/mcp-common" },
+    { name = "copilot-mcp-drafts", editable = "mcp-servers/drafts" },
     { name = "copilot-models", editable = "packages/models" },
     { name = "copilot-orchestrator", editable = "services/orchestrator" },
     { name = "copilot-policy-gateway", editable = "services/policy-gateway" },
@@ -442,6 +454,29 @@ wheels = [
 ]
 
 [[package]]
+name = "copilot-approval"
+version = "0.1.0"
+source = { editable = "services/approval" }
+dependencies = [
+    { name = "copilot-auth" },
+    { name = "copilot-drafts" },
+    { name = "copilot-policy-gateway" },
+    { name = "copilot-tracing" },
+    { name = "fastapi" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "copilot-auth", editable = "packages/auth" },
+    { name = "copilot-drafts", editable = "packages/drafts" },
+    { name = "copilot-policy-gateway", editable = "services/policy-gateway" },
+    { name = "copilot-tracing", editable = "packages/tracing" },
+    { name = "fastapi", specifier = ">=0.115" },
+    { name = "pydantic", specifier = ">=2.7" },
+]
+
+[[package]]
 name = "copilot-auth"
 version = "0.1.0"
 source = { editable = "packages/auth" }
@@ -477,6 +512,23 @@ requires-dist = [
 name = "copilot-devtools"
 version = "0.1.0"
 source = { editable = "packages/devtools" }
+
+[[package]]
+name = "copilot-drafts"
+version = "0.1.0"
+source = { editable = "packages/drafts" }
+dependencies = [
+    { name = "copilot-query-api" },
+    { name = "psycopg", extra = ["binary"] },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "copilot-query-api", editable = "services/query-api" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
+    { name = "pydantic", specifier = ">=2.7" },
+]
 
 [[package]]
 name = "copilot-eval-sets"
@@ -527,6 +579,7 @@ source = { editable = "mcp-servers/analytics" }
 dependencies = [
     { name = "copilot-auth" },
     { name = "copilot-catalogue" },
+    { name = "copilot-mcp-common" },
     { name = "copilot-schemas" },
     { name = "copilot-sql-verifier" },
     { name = "copilot-tracing" },
@@ -540,12 +593,59 @@ dependencies = [
 requires-dist = [
     { name = "copilot-auth", editable = "packages/auth" },
     { name = "copilot-catalogue", editable = "packages/catalogue" },
+    { name = "copilot-mcp-common", editable = "packages/mcp-common" },
     { name = "copilot-schemas", editable = "packages/schemas" },
     { name = "copilot-sql-verifier", editable = "packages/sql-verifier" },
     { name = "copilot-tracing", editable = "packages/tracing" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "mcp", specifier = ">=2.3" },
     { name = "opentelemetry-api", specifier = ">=1.27" },
+    { name = "pydantic", specifier = ">=2.7" },
+]
+
+[[package]]
+name = "copilot-mcp-common"
+version = "0.1.0"
+source = { editable = "packages/mcp-common" }
+dependencies = [
+    { name = "anyio" },
+    { name = "copilot-auth" },
+    { name = "copilot-tracing" },
+    { name = "mcp" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "anyio", specifier = ">=4" },
+    { name = "copilot-auth", editable = "packages/auth" },
+    { name = "copilot-tracing", editable = "packages/tracing" },
+    { name = "mcp", specifier = ">=2.3" },
+]
+
+[[package]]
+name = "copilot-mcp-drafts"
+version = "0.1.0"
+source = { editable = "mcp-servers/drafts" }
+dependencies = [
+    { name = "anyio" },
+    { name = "copilot-auth" },
+    { name = "copilot-drafts" },
+    { name = "copilot-mcp-common" },
+    { name = "copilot-schemas" },
+    { name = "copilot-tracing" },
+    { name = "mcp" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "anyio", specifier = ">=4" },
+    { name = "copilot-auth", editable = "packages/auth" },
+    { name = "copilot-drafts", editable = "packages/drafts" },
+    { name = "copilot-mcp-common", editable = "packages/mcp-common" },
+    { name = "copilot-schemas", editable = "packages/schemas" },
+    { name = "copilot-tracing", editable = "packages/tracing" },
+    { name = "mcp", specifier = ">=2.3" },
     { name = "pydantic", specifier = ">=2.7" },
 ]
 
@@ -573,7 +673,9 @@ source = { editable = "services/orchestrator" }
 dependencies = [
     { name = "copilot-auth" },
     { name = "copilot-catalogue" },
+    { name = "copilot-drafts" },
     { name = "copilot-mcp-analytics" },
+    { name = "copilot-mcp-drafts" },
     { name = "copilot-models" },
     { name = "copilot-policy-gateway" },
     { name = "copilot-query-api" },
@@ -590,7 +692,9 @@ dependencies = [
 requires-dist = [
     { name = "copilot-auth", editable = "packages/auth" },
     { name = "copilot-catalogue", editable = "packages/catalogue" },
+    { name = "copilot-drafts", editable = "packages/drafts" },
     { name = "copilot-mcp-analytics", editable = "mcp-servers/analytics" },
+    { name = "copilot-mcp-drafts", editable = "mcp-servers/drafts" },
     { name = "copilot-models", editable = "packages/models" },
     { name = "copilot-policy-gateway", editable = "services/policy-gateway" },
     { name = "copilot-query-api", editable = "services/query-api" },

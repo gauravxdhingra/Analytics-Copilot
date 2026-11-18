@@ -39,12 +39,21 @@ def mint_token(key: RSAPrivateKey, *, kid: str = KID, alg: str = "RS256", **over
 
 # --- real tokens from the local Keycloak (`make up`) -------------------------------------------
 
-# Each hop is (exchanging client, its secret env var, audience obtained).
-_HOPS = [
-    ("copilot-bff", "BFF_CLIENT_SECRET", "orchestrator"),
-    ("orchestrator", "ORCHESTRATOR_CLIENT_SECRET", "mcp-analytics"),
-    ("mcp-analytics", "MCP_ANALYTICS_CLIENT_SECRET", "query-api"),
-]
+# Each hop is (exchanging client, its secret env var, audience obtained). Paths are the allowed
+# chains in the realm; an audience off these paths cannot be obtained.
+_FIRST = ("copilot-bff", "BFF_CLIENT_SECRET", "orchestrator")
+_PATHS: dict[str, list[tuple[str, str, str]]] = {
+    "copilot-bff": [],
+    "orchestrator": [_FIRST],
+    "mcp-analytics": [_FIRST, ("orchestrator", "ORCHESTRATOR_CLIENT_SECRET", "mcp-analytics")],
+    "mcp-drafts": [_FIRST, ("orchestrator", "ORCHESTRATOR_CLIENT_SECRET", "mcp-drafts")],
+    "query-api": [
+        _FIRST,
+        ("orchestrator", "ORCHESTRATOR_CLIENT_SECRET", "mcp-analytics"),
+        ("mcp-analytics", "MCP_ANALYTICS_CLIENT_SECRET", "query-api"),
+    ],
+    "approval-service": [("copilot-bff", "BFF_CLIENT_SECRET", "approval-service")],
+}
 _CACHE: dict[tuple[str, str], str] = {}
 
 
@@ -68,16 +77,13 @@ async def keycloak_token_for(username: str, *, audience: str = "query-api") -> s
         )
         response.raise_for_status()
     token = str(response.json()["access_token"])
-    if audience != "copilot-bff":
-        for client_id, secret_env, hop_audience in _HOPS:
-            exchanger = TokenExchangeClient(
-                token_url=token_url,
-                client_id=client_id,
-                client_secret=os.environ[secret_env],
-                timeout_seconds=5.0,
-            )
-            token = await exchanger.exchange(token, hop_audience)
-            if hop_audience == audience:
-                break
+    for client_id, secret_env, hop_audience in _PATHS[audience]:
+        exchanger = TokenExchangeClient(
+            token_url=token_url,
+            client_id=client_id,
+            client_secret=os.environ[secret_env],
+            timeout_seconds=5.0,
+        )
+        token = await exchanger.exchange(token, hop_audience)
     _CACHE[key] = token
     return token

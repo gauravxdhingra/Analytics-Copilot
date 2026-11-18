@@ -13,6 +13,7 @@ REALM = "halcyon"
 SERVICE_CLIENTS = {
     "orchestrator": "ORCHESTRATOR_CLIENT_SECRET",
     "mcp-analytics": "MCP_ANALYTICS_CLIENT_SECRET",
+    "mcp-drafts": "MCP_DRAFTS_CLIENT_SECRET",
     "query-api": "QUERY_API_CLIENT_SECRET",
     "approval-service": "APPROVAL_CLIENT_SECRET",
 }
@@ -102,7 +103,7 @@ claims_scope = {
 # Which client may exchange a token for which audience. Anything else is refused by Keycloak.
 EXCHANGES = {
     "copilot-bff": ["orchestrator", "approval-service"],
-    "orchestrator": ["mcp-analytics"],
+    "orchestrator": ["mcp-analytics", "mcp-drafts"],
     "mcp-analytics": ["query-api"],
 }
 

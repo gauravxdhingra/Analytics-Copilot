@@ -119,6 +119,27 @@
       ]
     },
     {
+      "name": "aud-mcp-drafts",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "aud-mcp-drafts",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "mcp-drafts",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
       "name": "aud-orchestrator",
       "protocol": "openid-connect",
       "attributes": {
@@ -258,7 +279,8 @@
         "copilot-claims"
       ],
       "optionalClientScopes": [
-        "aud-mcp-analytics"
+        "aud-mcp-analytics",
+        "aud-mcp-drafts"
       ],
       "secret": "${ORCHESTRATOR_CLIENT_SECRET}",
       "attributes": {
@@ -282,6 +304,25 @@
         "aud-query-api"
       ],
       "secret": "${MCP_ANALYTICS_CLIENT_SECRET}",
+      "attributes": {
+        "standard.token.exchange.enabled": "true"
+      }
+    },
+    {
+      "clientId": "mcp-drafts",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": false,
+      "defaultClientScopes": [
+        "copilot-claims"
+      ],
+      "optionalClientScopes": [],
+      "secret": "${MCP_DRAFTS_CLIENT_SECRET}",
       "attributes": {
         "standard.token.exchange.enabled": "true"
       }

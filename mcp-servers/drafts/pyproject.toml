@@ -1,0 +1,29 @@
+[project]
+name = "copilot-mcp-drafts"
+version = "0.1.0"
+description = "Drafts MCP server: create, list, get and submit drafts. It cannot approve."
+requires-python = ">=3.12"
+dependencies = [
+  "copilot-auth",
+  "copilot-drafts",
+  "copilot-mcp-common",
+  "copilot-schemas",
+  "copilot-tracing",
+  "mcp>=2.3",
+  "anyio>=4",
+  "pydantic>=2.7",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mcp_drafts"]
+
+[tool.uv.sources]
+copilot-auth = { workspace = true }
+copilot-drafts = { workspace = true }
+copilot-mcp-common = { workspace = true }
+copilot-schemas = { workspace = true }
+copilot-tracing = { workspace = true }

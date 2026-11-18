@@ -13,14 +13,12 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Protocol
 
-import anyio
 from copilot_auth import AuthError, TokenValidator
 from copilot_catalogue import Catalogue
+from copilot_mcp import new_server
 from copilot_schemas import Evidence, Provenance
 from copilot_tracing import Tracing
 from mcp.server.auth.middleware.auth_context import get_access_token
-from mcp.server.auth.provider import AccessToken
-from mcp.server.auth.settings import AuthSettings
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from opentelemetry.trace import Span
@@ -51,29 +49,6 @@ class Deps:
     resource_url: str
     verifier: SqlVerifier = field(default_factory=PassThroughVerifier)
     tracing: Tracing | None = None
-
-
-class CopilotTokenVerifier:
-    """Adapts our validator to the MCP SDK's bearer-token hook."""
-
-    def __init__(self, validator: TokenValidator, resource_url: str) -> None:
-        self._validator = validator
-        self._resource = resource_url
-
-    async def verify_token(self, token: str) -> AccessToken | None:
-        try:
-            # Key fetches can block on the network, so keep them off the event loop.
-            principal = await anyio.to_thread.run_sync(self._validator.validate, token)
-        except AuthError:
-            return None
-        return AccessToken(
-            token=token,
-            client_id=principal.authorized_party,
-            scopes=list(principal.roles),
-            resource=self._resource,
-            subject=principal.subject,
-            claims={"tenant_id": principal.tenant_id, "entities": list(principal.entities)},
-        )
 
 
 class Column(BaseModel):
@@ -155,14 +130,8 @@ def _query_hash(sql: str, params: list[Any]) -> str:
 
 
 def build_server(deps: Deps) -> MCPServer:
-    server = MCPServer(
-        "analytics",
-        token_verifier=CopilotTokenVerifier(deps.validator, deps.resource_url),
-        auth=AuthSettings(
-            issuer_url=deps.issuer_url,
-            resource_server_url=deps.resource_url,
-            validate_token_resource=False,  # our validator checks the audience itself
-        ),
+    server = new_server(
+        "analytics", deps.validator, issuer_url=deps.issuer_url, resource_url=deps.resource_url
     )
 
     @contextmanager

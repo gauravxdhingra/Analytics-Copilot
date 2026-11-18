@@ -55,7 +55,7 @@ def ensure_schema(owner_dsn: str, *, app_password: str, reset: bool = False) -> 
     """Create the ledger and its writer role. `reset` drops existing history: tests only."""
     with psycopg.connect(owner_dsn) as conn:
         if reset:
-            conn.execute("DROP SCHEMA IF EXISTS ops CASCADE")
+            conn.execute("DROP TABLE IF EXISTS ops.ledger")  # only this table: ops is shared
         conn.execute(_DDL)
         exists = conn.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (APP_ROLE,)).fetchone()
         verb = "ALTER" if exists else "CREATE"

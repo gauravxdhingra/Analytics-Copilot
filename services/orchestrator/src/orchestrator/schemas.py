@@ -11,7 +11,7 @@ class _Strict(BaseModel):
 
 
 class Route(_Strict):
-    intent: Literal["insights", "documents", "unsupported", "ambiguous"]
+    intent: Literal["insights", "documents", "unsupported", "ambiguous", "draft"]
     clarification: str | None = None
     reason: str = ""
 

@@ -30,6 +30,8 @@ from orchestrator.narrative import numbers_are_grounded, template_text
 from orchestrator.schemas import NarrativeOut, PlanOut, Route
 
 PLANNER_AGENT = "insights.query_planner"
+DRAFTER_AGENT = "insights.drafter"
+DRAFT_TOOL = "drafts.create_draft"
 SELECT_TOOL = "analytics.run_validated_select"
 _TABLE_ROWS_FOR_NARRATOR = 50
 _REPAIRABLE = {"SYNTAX", "UNKNOWN_OBJECT", "BAD_PARAMS", "NOT_SELECT"}
@@ -56,6 +58,9 @@ class _State(BaseModel):
     table: AnswerTable | None = None
     text: str | None = None
     caveats: list[str] = Field(default_factory=list)
+    intent: str = "insights"
+    draft_id: str | None = None
+    draft_error: str | None = None
     status: AnswerStatus | None = None  # set when the run has reached a terminal outcome
     reason: str | None = None
     clarification: str | None = None
@@ -164,6 +169,9 @@ class InsightsOrchestrator:
         async def execute(state: _State) -> dict[str, Any]:
             return await self._execute(state, ctx)
 
+        async def draft(state: _State) -> dict[str, Any]:
+            return await self._draft(state, ctx)
+
         graph = StateGraph(_State)
         graph.add_node("route", self._traced("route", self._route))
         graph.add_node("plan", self._traced("plan", self._plan))
@@ -171,6 +179,7 @@ class InsightsOrchestrator:
         graph.add_node("execute", self._traced("execute", execute))
         graph.add_node("analyse", self._traced("analyse", self._analyse))
         graph.add_node("narrate", self._traced("narrate", self._narrate))
+        graph.add_node("draft", self._traced("draft", draft))
         graph.add_node("finish", self._traced("finish", self._finish))
         graph.add_edge(START, "route")
         graph.add_conditional_edges(
@@ -192,7 +201,10 @@ class InsightsOrchestrator:
             ["analyse", "plan", "finish"],
         )
         graph.add_edge("analyse", "narrate")
-        graph.add_edge("narrate", "finish")
+        graph.add_conditional_edges(
+            "narrate", lambda s: "draft" if s.intent == "draft" else "finish", ["draft", "finish"]
+        )
+        graph.add_edge("draft", "finish")
         graph.add_edge("finish", END)
         return graph.compile()
 
@@ -303,7 +315,7 @@ class InsightsOrchestrator:
             return self._stop(asked.updates, state, AnswerStatus.FAILED, "budget", "route:budget")
         route: Route = asked.parsed
         steps = [*state.steps, f"route:{route.intent}"]
-        base = {**asked.updates, "steps": steps}
+        base = {**asked.updates, "steps": steps, "intent": route.intent}
         if route.intent == "unsupported":
             return {**base, "status": AnswerStatus.REFUSED, "reason": "unsupported"}
         if route.intent == "documents":
@@ -493,6 +505,65 @@ class InsightsOrchestrator:
             text += f" As of {table.as_of[:10]}."
         return {**updates, "text": text, "caveats": caveats, "steps": [*state.steps, "narrate"]}
 
+    # -- drafting --
+
+    _ACTIONS = (
+        "Review the listed items with the entity's treasury lead.",
+        "Confirm supporting documents before any further action.",
+    )
+
+    def _draft_entity(self, state: _State, ctx: RunContext) -> str | None:
+        """The entity a draft is for: the single one in the data, else the user's only entity."""
+        table = state.table
+        if table and "entity_id" in table.columns:
+            index = table.columns.index("entity_id")
+            found = {str(row[index]) for row in table.rows}
+            if len(found) == 1:
+                return found.pop()
+        entities = ctx.principal.entities
+        return entities[0] if len(entities) == 1 else None
+
+    async def _draft(self, state: _State, ctx: RunContext) -> dict[str, Any]:
+        """Create a draft for a person to review. Code builds it from the verified result; nothing
+        from untrusted cells is copied in, and the gateway still guards the arguments."""
+        steps = [*state.steps, "draft"]
+        entity = self._draft_entity(state, ctx)
+        if entity is None:
+            return {"draft_error": "entity_unclear", "steps": steps}
+        if state.tool_calls >= self._caps.max_tool_calls:
+            return {"draft_error": "budget", "steps": steps}
+        evidence = [
+            {"source_tool": SELECT_TOOL, "source_ref": str((state.output or {}).get("query_hash"))}
+        ]
+        args = {
+            "title": f"Review: {state.question}"[:200],
+            "summary": (state.text or "")[:2000],
+            "entity_id": entity,
+            "recommended_actions": list(self._ACTIONS),
+            "evidence": evidence,
+        }
+        ctx.state.declare_plan({DRAFT_TOOL})  # declared in code, never by the model
+        outcome = await self._gateway.call(ctx, DRAFTER_AGENT, DRAFT_TOOL, args)
+        counted = {"tool_calls": state.tool_calls + 1, "steps": steps}
+        if isinstance(outcome, Allowed):
+            return {**counted, "draft_id": str(outcome.output.get("draft_id"))}
+        return {**counted, "draft_error": self._draft_error(outcome)}
+
+    @staticmethod
+    def _draft_error(denial: Denied) -> str:
+        detail = (denial.detail or "").split()[0] if denial.detail else ""
+        if denial.reason in ("ROLE_REQUIRED", "TOOL_NOT_ALLOWED"):
+            return "not_permitted"
+        if denial.reason == "UPSTREAM_ERROR":
+            return {
+                "NOT_ENTITLED": "not_entitled",
+                "UNTRUSTED_CONTENT": "untrusted_content",
+                "ROLE_REQUIRED": "not_permitted",
+            }.get(detail, "unavailable")
+        if denial.reason.startswith(("TAINT", "CONSTRAINT", "INVALID")):
+            return "policy"
+        return "unavailable"
+
     # -- finish --
 
     async def _finish(self, state: _State) -> dict[str, Any]:
@@ -509,6 +580,8 @@ class InsightsOrchestrator:
 
     def _answer(self, state: _State) -> Answer:
         common: dict[str, Any] = {"usage": self._usage(state), "steps": state.steps}
+        if state.status is None:
+            common |= {"draft_id": state.draft_id, "draft_error": state.draft_error}
         if state.status is AnswerStatus.REFUSED:
             reason = state.reason or "unsupported"
             return Answer(

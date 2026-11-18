@@ -12,6 +12,8 @@ Classify it as exactly one of:
   governed treasury data can answer, including questions about data the user may not be allowed
   to see (the data layer decides access, not you).
 - documents: a question about policies, procedures, emails or attachments.
+- draft: the user explicitly asks to prepare, draft or file a review or case file based on data.
+  A plain question is never a draft; a draft is only ever a proposal for a person to review.
 - unsupported: forecasts, predictions, ratings, opinions or anything the data cannot answer.
 - ambiguous: the question lacks something essential (which entity, currency or period) so any
   answer would be a guess. Put one short clarifying question in `clarification`.

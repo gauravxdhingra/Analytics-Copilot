@@ -318,3 +318,93 @@ async def test_the_worst_case_path_fits_inside_the_derived_recursion_limit(
     answer = await orchestrator.run(QUESTION, make_ctx())
     assert answer.status is AnswerStatus.FAILED  # a clean failure, not a GraphRecursionError
     assert len(gateway.calls) <= caps.max_tool_calls
+
+
+# --- drafting: the highest thing the copilot can do is write a draft ------------------------------------
+
+DRAFT_QUESTION = "Draft a review of the payments near the approval limit."
+
+
+def _created(draft_id: str = "d-1") -> Allowed:
+    return Allowed(output={"draft_id": draft_id, "status": "draft", "entity_id": "HAL-DE"})
+
+
+async def test_an_explicit_request_creates_a_draft_from_the_verified_result(
+    gateway: FakeGateway,
+) -> None:
+    gateway.queue(_allowed([[3]]), _created("d-42"))
+    orchestrator, _ = build(
+        [route("draft"), plan(), narrate("Three payments sit just under the limit.")], gateway
+    )
+    ctx = make_ctx()
+    answer = await orchestrator.run(DRAFT_QUESTION, ctx)
+
+    assert answer.status is AnswerStatus.ANSWERED and answer.draft_id == "d-42"
+    agent, tool, args = gateway.calls[1]
+    assert (agent, tool) == ("insights.drafter", "drafts.create_draft")
+    assert args["entity_id"] == "HAL-DE"  # the user's only entity
+    assert "Three payments" in args["summary"] and args["title"].startswith("Review")
+    assert args["evidence"] == [
+        {"source_tool": "analytics.run_validated_select", "source_ref": "sha256:abc"}
+    ]
+    assert ctx.state.plan == {"drafts.create_draft"}  # declared by code before the call
+    assert "drafts.approve" not in str(gateway.calls)  # there is no such tool to call
+
+
+async def test_an_ordinary_question_never_creates_a_draft(gateway: FakeGateway) -> None:
+    gateway.queue(_allowed())
+    orchestrator, _ = build([route("insights"), plan(), narrate("There are 776.")], gateway)
+    answer = await orchestrator.run(QUESTION, make_ctx())
+    assert answer.draft_id is None and len(gateway.calls) == 1
+
+
+@pytest.mark.parametrize(
+    ("denial", "reason"),
+    [
+        (Denied("ROLE_REQUIRED"), "not_permitted"),
+        (Denied("UPSTREAM_ERROR", "NOT_ENTITLED"), "not_entitled"),
+        (Denied("UPSTREAM_ERROR", "UNTRUSTED_CONTENT"), "untrusted_content"),
+        (Denied("TAINT_ARGS"), "policy"),
+        (Denied("UPSTREAM_UNAVAILABLE"), "unavailable"),
+    ],
+)
+async def test_a_refused_draft_leaves_the_answer_intact_and_says_why(
+    gateway: FakeGateway, denial: Denied, reason: str
+) -> None:
+    gateway.queue(_allowed([[3]]), denial)
+    orchestrator, _ = build([route("draft"), plan(), narrate("Three payments.")], gateway)
+    answer = await orchestrator.run(DRAFT_QUESTION, make_ctx())
+    assert answer.status is AnswerStatus.ANSWERED and answer.draft_id is None
+    assert answer.draft_error == reason and "3" in (answer.text or "")
+
+
+async def test_the_draft_entity_comes_from_the_data_when_the_user_has_several(
+    gateway: FakeGateway,
+) -> None:
+    gateway.queue(_allowed([["HAL-UK", 3]], columns=["entity_id", "n"]), _created())
+    orchestrator, _ = build([route("draft"), plan(), narrate("Three in HAL-UK.")], gateway)
+    ctx = make_ctx()
+    ctx.principal = ctx.principal.model_copy(update={"entities": ("HAL-DE", "HAL-UK")})
+    await orchestrator.run(DRAFT_QUESTION, ctx)
+    assert gateway.calls[1][2]["entity_id"] == "HAL-UK"
+
+
+async def test_an_unclear_entity_means_no_draft_and_a_note_to_say_which(
+    gateway: FakeGateway,
+) -> None:
+    gateway.queue(_allowed([[3]]))
+    orchestrator, _ = build([route("draft"), plan(), narrate("Three payments.")], gateway)
+    ctx = make_ctx()
+    ctx.principal = ctx.principal.model_copy(update={"entities": ("HAL-DE", "HAL-UK")})
+    answer = await orchestrator.run(DRAFT_QUESTION, ctx)
+    assert answer.draft_id is None and answer.draft_error == "entity_unclear"
+    assert len(gateway.calls) == 1
+
+
+async def test_the_draft_call_counts_against_the_tool_budget(gateway: FakeGateway) -> None:
+    gateway.queue(_allowed([[3]]))
+    orchestrator, _ = build(
+        [route("draft"), plan(), narrate("Three payments.")], gateway, RunCaps(max_tool_calls=1)
+    )
+    answer = await orchestrator.run(DRAFT_QUESTION, make_ctx())
+    assert answer.draft_id is None and answer.draft_error == "budget" and len(gateway.calls) == 1

@@ -41,6 +41,8 @@ class Answer(BaseModel):
     agent_result: AgentResult | None = None
     usage: Usage = Field(default_factory=Usage)
     steps: list[str] = Field(default_factory=list)
+    draft_id: str | None = None  # set when a draft was created for a human to review
+    draft_error: str | None = None  # why a requested draft was not created
     trace_id: str | None = None  # one trace per run, for the UI's "how I got this"
     # This capability has no write tools, so nothing is ever attempted on untrusted say-so.
     actions: tuple[str, ...] = ()

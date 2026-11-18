@@ -11,6 +11,17 @@ agents:
       - analytics.run_validated_select:
           constraints: { max_rows: 5000, max_runtime_s: 30, require_purpose: true }
           requires_role: [analyst, treasury_manager]
+  insights.drafter:
+    tools:
+      - drafts.create_draft:
+          requires_role: [analyst, treasury_manager]
+  user.drafts:
+    # Actions a person takes themselves, routed through the same gateway for ledger and trace.
+    tools:
+      - drafts.list_drafts
+      - drafts.get_draft
+      - drafts.submit_for_review:
+          requires_role: [analyst, treasury_manager]
   insights.narrator:
     tools: []            # writes the answer from evidence; it gets no tools
   recon.remittance_extractor:

@@ -15,12 +15,15 @@ import httpx
 import httpx2
 from copilot_auth import JwksKeyProvider, TokenExchangeClient, TokenValidator
 from copilot_catalogue import Catalogue
+from copilot_drafts import DraftsRepo, PostgresEntitlements
 from copilot_sql_verifier import Verifier
 from copilot_tracing import Tracing
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp_analytics.query_client import HttpQueryApi
 from mcp_analytics.server import Deps, build_server
 from mcp_analytics.verifier import CatalogueVerifier
+from mcp_drafts.server import Deps as DraftsDeps
+from mcp_drafts.server import build_server as build_drafts_server
 from policy_gateway import Gateway, Ledger, McpUpstream, Policy
 from query_api.app import create_app
 from query_api.config import Settings
@@ -91,15 +94,39 @@ async def local_stack(
         )
         await stack.enter_async_context(mcp_app.router.lifespan_context(mcp_app))
 
-        def http_for(_server: str, token: str) -> httpx2.AsyncClient:
+        drafts_dsn = f"postgresql://copilot_drafts:{env['DRAFTS_DB_PASSWORD']}@{host}/analytics"
+        drafts_server = build_drafts_server(
+            DraftsDeps(
+                validator=TokenValidator(
+                    issuer=issuer, audience="mcp-drafts", keys=JwksKeyProvider(jwks)
+                ),
+                store=DraftsRepo(drafts_dsn),
+                entitlements=PostgresEntitlements(drafts_dsn),
+                issuer_url=issuer,
+                resource_url="http://mcp-drafts/mcp",
+                tracing=tracing,
+            )
+        )
+        drafts_app = drafts_server.streamable_http_app(
+            transport_security=TransportSecuritySettings(
+                enable_dns_rebinding_protection=True,
+                allowed_hosts=["mcp-drafts"],
+                allowed_origins=[],
+            )
+        )
+        await stack.enter_async_context(drafts_app.router.lifespan_context(drafts_app))
+        apps = {"analytics": (mcp_app, "http://mcp"), "drafts": (drafts_app, "http://mcp-drafts")}
+
+        def http_for(server_name: str, token: str) -> httpx2.AsyncClient:
+            app, base = apps[server_name]
             return httpx2.AsyncClient(
-                transport=httpx2.ASGITransport(app=mcp_app),
-                base_url="http://mcp",
+                transport=httpx2.ASGITransport(app=app),
+                base_url=base,
                 headers={"Authorization": f"Bearer {token}"},
             )
 
         upstream = McpUpstream(
-            {"analytics": "http://mcp/mcp"},
+            {"analytics": "http://mcp/mcp", "drafts": "http://mcp-drafts/mcp"},
             http_factory=http_for,
             timeout_seconds=10.0,
             trace_context=tracing.inject if tracing else None,

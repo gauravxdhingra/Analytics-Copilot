@@ -1,6 +1,7 @@
 import os
 from collections.abc import Iterator
 
+import psycopg
 import pytest
 from orchestrator.testing import FakeGateway
 from policy_gateway.postgres_ledger import PostgresLedger, ensure_schema
@@ -34,3 +35,9 @@ def pg_ledger(owner_dsn: str) -> Iterator[PostgresLedger]:
     yield PostgresLedger(
         f"postgresql://copilot_gateway:{_env('GATEWAY_DB_PASSWORD')}@{host}/analytics"
     )
+
+
+@pytest.fixture
+def owner(owner_dsn: str) -> Iterator[psycopg.Connection]:
+    with psycopg.connect(owner_dsn, autocommit=True) as conn:
+        yield conn
