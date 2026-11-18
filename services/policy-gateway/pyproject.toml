@@ -1,0 +1,28 @@
+[project]
+name = "copilot-policy-gateway"
+version = "0.1.0"
+description = "Policy enforcement point between every agent and every MCP server (PL1)."
+requires-python = ">=3.12"
+dependencies = [
+  "copilot-auth",
+  "copilot-schemas",
+  "copilot-tracing",
+  "mcp>=2.3",
+  "httpx2",
+  "jsonschema>=4",
+  "pydantic>=2.7",
+  "pyyaml>=6",
+  "psycopg[binary]>=3.2",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/policy_gateway"]
+
+[tool.uv.sources]
+copilot-auth = { workspace = true }
+copilot-schemas = { workspace = true }
+copilot-tracing = { workspace = true }

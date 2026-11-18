@@ -8,10 +8,10 @@ This is an **engineering showcase built as a full product, not a proof of concep
 |---|---|
 | This file | Product scope, capabilities, safety, evaluation, delivery stages |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | System design, Query API contract, compute model, AWS (primary) / Azure (second) / laptop deployment |
-| `docs/adr/` | Architecture decision records (to be created) |
+| `docs/adr/` | Architecture decision records (template and index in place) |
 | `Generative AI Treasury Management.md` | Original source notes. **Contains employer-specific names; keep out of the public repository.** |
 
-Markers: **[DECIDE]** needs a decision; **[TWEAK]** is a sensible default; **[VERIFY]** check against current library or spec versions before building.
+Markers: **[DECIDE]** needs a decision; **[TWEAK]** is a sensible default; **[VERIFY]** check against current library or spec versions before building; **[CONFIRM]** confirm with the owner of the underlying system.
 
 ---
 
@@ -982,7 +982,7 @@ Stages have exit criteria, not dates. Detailed planning happens in the next phas
 |---|---|---|---|
 | D1 | Product name | **Analytics Copilot**, with no organization or brand name attached. The fictional company in the synthetic data keeps the working name *Halcyon Group* until changed. | Decided |
 | D2 | Cloud | **AWS primary, Azure second.** GCP deferred. | Decided |
-| D3 | Model hosting | **Hosted models** (Bedrock on AWS, AI Foundry on Azure). The full product also runs on a laptop, calling the same hosted APIs. Small classifiers run in-container on CPU. | Decided |
+| D3 | Model hosting | **Hosted models** (Bedrock on AWS, AI Foundry on Azure). The full product also runs on a laptop, calling the same hosted APIs. Small classifiers run in-container on CPU. Showcase and laptop use the Gemini API behind a provider-neutral model port (ADR 0002). | Decided |
 | D4 | Analytics data access | **REST Query API that accepts SQL and runs it on the Postgres analytics databases.** Contract in ARCHITECTURE.md §8.2. Direct database access was considered and rejected; its cautions and fixes are in ARCHITECTURE.md §8.3 and double as the checklist for the reference Query API. | Decided; real API contract to be confirmed |
 | D5 | Semantic layer | Own catalogue + MetricFlow/Cube export adapter | Decided |
 | D6 | Authorization | **Data authorization stays with the underlying system**, enforced by the Query API executing as the user. The copilot owns only capability and tool policy (YAML, no external engine). | Decided; confirm the underlying system enforces row scope |

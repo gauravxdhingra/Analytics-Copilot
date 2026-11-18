@@ -8,3 +8,13 @@
 # Claude Code personal overrides
 .claude/settings.local.json
 CLAUDE.local.md
+.venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+node_modules/
+dist/
+.hypothesis/
+reports/

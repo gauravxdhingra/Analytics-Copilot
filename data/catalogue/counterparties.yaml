@@ -1,0 +1,12 @@
+store: treasury.counterparties
+definition: "One row per business counterparty we pay or receive from."
+owner: { business: treasury-ops, steward: data-platform }
+grain: [counterparty_id]
+columns:
+  - { name: counterparty_id, type: text }
+  - { name: name, type: text }
+  - { name: country, type: character }
+relationships:
+  - { name: counterparties.ssis, to: treasury.ssis, join_on: [[counterparty_id, counterparty_id]], cardinality: one_to_many }
+known_issues: []
+example_questions: ["Which counterparty received the most"]

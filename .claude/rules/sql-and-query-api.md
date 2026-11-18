@@ -2,14 +2,14 @@
 paths:
   - "packages/sql-verifier/**"
   - "services/query-api/**"
-  - "mcp/analytics/**"
+  - "mcp-servers/analytics/**"
   - "packages/catalogue/**"
   - "data/catalogue/**"
 ---
 
 # SQL verification, Query API and catalogue
 
-Spec: FinAnalytics.md §6; ARCHITECTURE.md §8.2–8.3. The checklist in §8.3 is the implementation checklist for the reference Query API.
+Spec: Analytics Copilot.md §6; ARCHITECTURE.md §8.2–8.3. The checklist in §8.3 is the implementation checklist for the reference Query API.
 
 **Verifier (deterministic first):** `sqlglot`, Postgres dialect. Exactly one SELECT on one database. Reject identifiers not in the catalogue, sensitive columns, missing current-version filter, un-grouped money, mismatched date semantics, cross joins, non-allowlisted functions, catalog access (`pg_catalog`, `information_schema`, `pg_stats`). The LLM semantic check can only reject.
 
@@ -22,6 +22,6 @@ Spec: FinAnalytics.md §6; ARCHITECTURE.md §8.2–8.3. The checklist in §8.3 i
 - `numeric` maps to `Decimal`; set the session time zone explicitly.
 - Multiple queries for one answer run in one `REPEATABLE READ` transaction.
 
-**Catalogue:** one YAML per store (FinAnalytics.md §6.2), git-versioned, reviewed by a steward. Schema-drift CI must fail on undocumented or removed columns. Use `/catalogue-entry`.
+**Catalogue:** one YAML per store (Analytics Copilot.md §6.2), git-versioned, reviewed by a steward. Schema-drift CI must fail on undocumented or removed columns. Use `/catalogue-entry`.
 
 Every verifier rule needs a positive and a negative test. A rule without a test is not a control.

@@ -1,0 +1,18 @@
+store: treasury.daily_balances
+definition: "One row per account per calendar day: the closing balance in the account currency."
+owner: { business: treasury-ops, steward: data-platform }
+grain: [account_id, balance_date]
+columns:
+  - { name: account_id, type: text }
+  - { name: balance_date, type: date, description: "Weekends and holidays carry the previous close" }
+  - { name: closing, type: numeric }
+  - { name: currency, type: character }
+dates:
+  balance_date: "Calendar day of the closing balance"
+money:
+  - { column: closing, currency_column: currency, sign: "as held", pinned_by: [account_id] }
+relationships:
+  - { name: balances.account, to: treasury.accounts, join_on: [[account_id, account_id]], cardinality: many_to_one }
+synonyms: { "cash position": "closing balance per currency on a date" }
+known_issues: ["Balances are never added across currencies; report one total per currency."]
+example_questions: ["Closing balance of an account on a date"]

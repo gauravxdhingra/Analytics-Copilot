@@ -1,0 +1,19 @@
+store: treasury.accounts
+definition: "One row per bank account, held by one legal entity in one currency."
+owner: { business: treasury-ops, steward: data-platform }
+grain: [account_id]
+columns:
+  - { name: account_id, type: text }
+  - { name: entity_id, type: text }
+  - { name: bank_id, type: text }
+  - { name: iban, type: text, sensitivity: restricted }
+  - { name: currency, type: character }
+  - { name: opened_on, type: date }
+  - { name: opening_balance, type: numeric }
+money:
+  - { column: opening_balance, currency_column: currency, sign: "as held", pinned_by: [account_id] }
+relationships:
+  - { name: accounts.entity, to: treasury.entities, join_on: [[entity_id, entity_id]], cardinality: many_to_one }
+  - { name: accounts.bank, to: treasury.banks, join_on: [[bank_id, bank_id]], cardinality: many_to_one }
+known_issues: []
+example_questions: ["Accounts per entity and currency"]

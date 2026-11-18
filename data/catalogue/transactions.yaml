@@ -1,0 +1,38 @@
+store: treasury.transactions
+definition: "One row per cash transaction version. A restated transaction has a superseded version and a current one."
+owner: { business: treasury-ops, steward: data-platform }
+grain: [transaction_id, version]
+required_filters:
+  - { column: is_current, value: true, waived_by: history }
+  - { column: status, value: booked, waived_by: cancelled }
+columns:
+  - { name: transaction_id, type: text, description: "Stable id across versions" }
+  - { name: version, type: integer, description: "1 for the original; higher for restatements" }
+  - { name: is_current, type: boolean, description: "True on exactly one version per transaction" }
+  - { name: entity_id, type: text, description: "Legal entity that owns the account" }
+  - { name: account_id, type: text }
+  - { name: counterparty_id, type: text }
+  - { name: booking_date, type: date, description: "Date the transaction was booked; use for period reporting" }
+  - { name: value_date, type: date, description: "Date funds have value; use for cash positioning" }
+  - { name: amount, type: numeric, description: "Signed: negative is an outflow, in the account currency" }
+  - { name: currency, type: character, description: "ISO 4217 code of the account" }
+  - { name: status, type: text, description: "booked or cancelled" }
+  - { name: reference, type: text }
+  - { name: remittance_text, type: text, description: "Free text from the payer or bank", untrusted: true }
+  - { name: beneficiary_iban, type: text, description: "Destination account of an outflow", sensitivity: restricted }
+  - { name: loaded_at, type: "timestamp with time zone", description: "When the row was loaded (snapshot time)" }
+dates:
+  booking_date: "Booking date; the default for period questions"
+  value_date: "Value date; use for cash positioning"
+money:
+  - { column: amount, currency_column: currency, sign: "negative is an outflow", pinned_by: [account_id] }
+relationships:
+  - { name: transactions.counterparty, to: treasury.counterparties, join_on: [[counterparty_id, counterparty_id]], cardinality: many_to_one }
+  - { name: transactions.account, to: treasury.accounts, join_on: [[account_id, account_id]], cardinality: many_to_one }
+  - { name: transactions.entity, to: treasury.entities, join_on: [[entity_id, entity_id]], cardinality: many_to_one }
+  - { name: transactions.ssis, to: treasury.ssis, join_on: [[counterparty_id, counterparty_id]], cardinality: one_to_many }
+synonyms: { outflows: "amount < 0", inflows: "amount > 0", payments: "outflows" }
+known_issues:
+  - "Rows cancelled after the snapshot remain with status cancelled; they must be excluded from totals."
+  - "Restated transactions keep their superseded version; summing without is_current double counts them."
+example_questions: ["Total outflow from an account in a month", "Largest outflows in a quarter"]

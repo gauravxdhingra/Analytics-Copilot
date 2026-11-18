@@ -8,7 +8,7 @@ paths:
 
 # Evals and the synthetic world
 
-Spec: FinAnalytics.md §4 and §11.
+Spec: Analytics Copilot.md §4 and §11.
 
 - Gold sets are authored **independently of the system** and pinned to a synthetic-world version. Never derive expected answers by running the system under test.
 - Held-out sets are never used for prompt tuning. Do not read them while iterating on prompts.

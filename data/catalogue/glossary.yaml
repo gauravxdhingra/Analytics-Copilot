@@ -1,0 +1,22 @@
+terms:
+  booked:
+    definition: "A transaction with status booked, on its current version."
+    maps_to: "treasury.transactions where is_current and status = 'booked'"
+  outflow:
+    definition: "Money leaving an account: a negative transaction amount."
+    maps_to: "treasury.transactions where amount < 0"
+  inflow:
+    definition: "Money entering an account: a positive transaction amount."
+    maps_to: "treasury.transactions where amount > 0"
+  cash position:
+    definition: "Closing balance per account per currency on a date. Never summed across currencies."
+    maps_to: "treasury.daily_balances grouped by currency"
+  restated:
+    definition: "A transaction corrected after booking: the old version stays, the new one is current."
+    maps_to: "treasury.transactions version > 1"
+  approval limit:
+    definition: "The most one payment may be without a second approver, per entity, in the entity currency."
+    maps_to: "treasury.entities.approval_limit"
+  structuring:
+    definition: "Splitting payments to stay just under an approval limit."
+    maps_to: "treasury.payments joined to transactions near approval_limit"

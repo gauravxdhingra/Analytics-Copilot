@@ -4,7 +4,7 @@
 - **Date:** YYYY-MM-DD
 - **Deciders:** names or roles
 - **Supersedes:** none
-- **Spec references:** FinAnalytics.md §…, ARCHITECTURE.md §…, D…
+- **Spec references:** Analytics Copilot.md §…, ARCHITECTURE.md §…, D…
 
 ## Context
 

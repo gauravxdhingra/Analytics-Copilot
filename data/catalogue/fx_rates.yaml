@@ -1,0 +1,14 @@
+store: treasury.fx_rates
+definition: "Daily FX rates on business days: units of quote currency per one unit of base."
+owner: { business: treasury-ops, steward: data-platform }
+grain: [rate_date, base, quote]
+columns:
+  - { name: rate_date, type: date }
+  - { name: base, type: character }
+  - { name: quote, type: character }
+  - { name: rate, type: numeric, description: "Six decimal places" }
+dates:
+  rate_date: "Rate day; business days only"
+relationships: []
+known_issues: ["No rate exists on weekends or holidays."]
+example_questions: ["EUR/USD rate on a date"]

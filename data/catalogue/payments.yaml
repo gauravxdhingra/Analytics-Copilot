@@ -1,0 +1,21 @@
+store: treasury.payments
+definition: "One row per outgoing payment, with the three people who prepared, checked and released it."
+owner: { business: treasury-ops, steward: data-platform }
+grain: [payment_id]
+columns:
+  - { name: payment_id, type: text }
+  - { name: transaction_id, type: text }
+  - { name: transaction_version, type: integer }
+  - { name: entity_id, type: text }
+  - { name: maker, type: text, description: "Person who prepared the payment" }
+  - { name: checker, type: text, description: "Person who verified it; never the maker" }
+  - { name: releaser, type: text, description: "Person who released it; never maker or checker" }
+  - { name: created_at, type: "timestamp with time zone", description: "When the payment was created (UTC)" }
+dates:
+  created_at: "Creation time; filter with a half-open range"
+relationships:
+  - { name: payments.transaction, to: treasury.transactions, join_on: [[transaction_id, transaction_id], [transaction_version, version]], cardinality: many_to_one }
+  - { name: payments.entity, to: treasury.entities, join_on: [[entity_id, entity_id]], cardinality: many_to_one }
+synonyms: { approvers: "checker, releaser" }
+known_issues: ["A payment keeps pointing at the version of the transaction it was created for."]
+example_questions: ["Payments created per maker in a month"]

@@ -1,0 +1,19 @@
+[project]
+name = "halcyon-world"
+version = "0.1.0"
+description = "Deterministic synthetic treasury world for the fictional Halcyon Group."
+requires-python = ">=3.12"
+dependencies = ["copilot-schemas", "pydantic>=2.7", "psycopg[binary]>=3.2"]
+
+[project.scripts]
+halcyon-world = "halcyon_world.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/halcyon_world"]
+
+[tool.uv.sources]
+copilot-schemas = { workspace = true }

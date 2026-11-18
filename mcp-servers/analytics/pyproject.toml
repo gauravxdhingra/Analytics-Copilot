@@ -1,0 +1,30 @@
+[project]
+name = "copilot-mcp-analytics"
+version = "0.1.0"
+description = "Analytics MCP server: read-only tools over the Query API, as the requesting user."
+requires-python = ">=3.12"
+dependencies = [
+  "copilot-auth",
+  "copilot-schemas",
+  "copilot-tracing",
+  "copilot-catalogue",
+  "copilot-sql-verifier",
+  "mcp>=2.3",
+  "httpx>=0.27",
+  "opentelemetry-api>=1.27",
+  "pydantic>=2.7",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mcp_analytics"]
+
+[tool.uv.sources]
+copilot-auth = { workspace = true }
+copilot-schemas = { workspace = true }
+copilot-tracing = { workspace = true }
+copilot-catalogue = { workspace = true }
+copilot-sql-verifier = { workspace = true }

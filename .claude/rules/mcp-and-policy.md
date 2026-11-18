@@ -1,13 +1,13 @@
 ---
 paths:
-  - "mcp/**"
+  - "mcp-servers/**"
   - "services/policy-gateway/**"
   - "services/orchestrator/**"
 ---
 
 # MCP servers, policy gateway and orchestrator
 
-Spec: FinAnalytics.md §5.1–5.2 and §3; ARCHITECTURE.md §3, §5.
+Spec: Analytics Copilot.md §5.1–5.2 and §3; ARCHITECTURE.md §3, §5.
 
 - The four servers are `analytics`, `operations`, `knowledge`, `drafts`. They are internal-only and are reached only through the policy gateway (PL1).
 - Tool tiers are `READ`, `ANALYZE`, `DRAFT`. **Never add a tool that mutates or executes.** `drafts` can create and submit drafts, never approve.

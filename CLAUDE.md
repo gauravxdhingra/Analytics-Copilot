@@ -2,13 +2,13 @@
 
 Enterprise treasury assistant: a global chatbot in a web app that answers questions over governed data (governed text-to-SQL), explains how it got each answer, and drafts work for humans to approve. It reaches data and tools only through MCP servers behind a policy gateway. Every step is traced.
 
-**Status:** specification only. No code yet. Next is Stage S0 (see FinAnalytics.md §14).
+**Status:** specification only. No code yet. Next is Stage S0 (see Analytics Copilot.md §14).
 
 ## Source of truth
 
 | File | Read it for |
 |---|---|
-| [FinAnalytics.md](FinAnalytics.md) | Product scope, capabilities (PL1–PL4, C1–C4, B1–B6), safety, evals, delivery stages S0–S8, decisions D1–D11 |
+| [Analytics Copilot.md](Analytics%20Copilot.md) | Product scope, capabilities (PL1–PL4, C1–C4, B1–B6), safety, evals, delivery stages S0–S8, decisions D1–D11 |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Containers, request lifecycle, identity, compute, AWS/Azure/laptop deployment, Query API contract (§8.2) |
 | `docs/adr/` | Decision records. Template: `docs/adr/0000-template.md` |
 
@@ -18,7 +18,7 @@ Markers in the docs: **[DECIDE]** needs a decision, **[TWEAK]** is a default, **
 
 ## Non-negotiables
 
-These come from ARCHITECTURE.md §1 and FinAnalytics.md §3. A change that breaks one needs an ADR first.
+These come from ARCHITECTURE.md §1 and Analytics Copilot.md §3. A change that breaks one needs an ADR first.
 
 1. **Read and draft, never execute.** No tool releases payments, changes config or finalizes matches. The top tool tier is `DRAFT`; approval is a separate human service.
 2. **Deterministic gates are final.** SQL verification, tool policy and money arithmetic run in code. A model can explain a block, never override it.

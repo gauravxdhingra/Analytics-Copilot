@@ -1,0 +1,18 @@
+store: treasury.ssis
+definition: "Standing settlement instructions: where a counterparty is paid, per currency, over time."
+owner: { business: treasury-ops, steward: data-platform }
+grain: [ssi_id]
+columns:
+  - { name: ssi_id, type: text }
+  - { name: counterparty_id, type: text }
+  - { name: currency, type: character }
+  - { name: iban, type: text, sensitivity: restricted }
+  - { name: effective_from, type: date }
+  - { name: effective_to, type: date, description: "Exclusive end; null means open-ended" }
+dates:
+  effective_from: "Start of validity (inclusive)"
+  effective_to: "End of validity (exclusive)"
+relationships:
+  - { name: ssis.counterparty, to: treasury.counterparties, join_on: [[counterparty_id, counterparty_id]], cardinality: many_to_one }
+known_issues: ["A counterparty can have several instructions; joining to it repeats rows."]
+example_questions: ["Counterparties whose instructions changed"]

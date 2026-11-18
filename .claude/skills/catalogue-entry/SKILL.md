@@ -6,7 +6,7 @@ argument-hint: "<store name>"
 
 Catalogue entry for: $ARGUMENTS
 
-Read FinAnalytics.md §6.2 (catalogue format) and §6.5 (verifier), plus `.claude/rules/sql-and-query-api.md`.
+Read Analytics Copilot.md §6.2 (catalogue format) and §6.5 (verifier), plus `.claude/rules/sql-and-query-api.md`.
 
 1. **Inspect the source.** Use the Query API schema/freshness endpoints or the synthetic-world manifest to get real columns, types and keys. Do not guess columns. Ask the user for anything the data cannot tell you (business meaning, steward, sensitivity).
 2. **Write `data/catalogue/<store>.yaml`** with: `store`, `definition`, `owner` (business + steward), `grain`, `current_row_filter`, `dates` (each with meaning and time zone), `money` (currency column, sign convention), `relationships` (with explicit cardinality), `dimensions`, `state_values`, `sensitivity` per column, `synonyms`, `known_issues`, `example_questions`.

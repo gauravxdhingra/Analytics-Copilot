@@ -1,0 +1,11 @@
+store: treasury.banks
+definition: "One row per (fictional) bank."
+owner: { business: treasury-ops, steward: data-platform }
+grain: [bank_id]
+columns:
+  - { name: bank_id, type: text }
+  - { name: name, type: text }
+  - { name: bic, type: text }
+relationships: []
+known_issues: []
+example_questions: []

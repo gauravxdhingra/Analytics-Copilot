@@ -2,9 +2,9 @@
 
 Reference architecture for **Analytics Copilot**: an enterprise treasury assistant built into a web application as a global chatbot. The copilot reaches governed data and tools through MCP servers. This document covers the system shape, the request lifecycle, the security model and deployment.
 
-**Deployment targets:** AWS is the primary cloud. Azure is second. Every service also runs on a laptop with Docker Compose. Product scope and per-capability design live in [FinAnalytics.md](FinAnalytics.md).
+**Deployment targets:** AWS is the primary cloud. Azure is second. Every service also runs on a laptop with Docker Compose. Product scope and per-capability design live in [Analytics Copilot.md](Analytics%20Copilot.md).
 
-Decisions referenced as **D1–D11** are recorded in FinAnalytics.md §16. Items marked **[ADR]** become Architecture Decision Records under `docs/adr/`. **[VERIFY]** means check against current vendor docs and spec versions before building. **[CONFIRM]** means confirm with the owner of the underlying system.
+Decisions referenced as **D1–D11** are recorded in Analytics Copilot.md §16. Items marked **[ADR]** become Architecture Decision Records under `docs/adr/`. **[VERIFY]** means check against current vendor docs and spec versions before building. **[CONFIRM]** means confirm with the owner of the underlying system.
 
 ---
 
@@ -37,7 +37,7 @@ flowchart LR
   AC -->|approvals, alerts| WF[Ticketing / workflow tools]
 ```
 
-For the showcase, the Query API, analytics databases, operational APIs and documents are provided by a **synthetic treasury domain** (FinAnalytics.md §4). The copilot talks to them through the same interfaces a real deployment would use (§9).
+For the showcase, the Query API, analytics databases, operational APIs and documents are provided by a **synthetic treasury domain** (Analytics Copilot.md §4). The copilot talks to them through the same interfaces a real deployment would use (§9).
 
 ---
 
@@ -137,7 +137,7 @@ sequenceDiagram
   O->>L: plan -> MetricSpec
   O->>P: tool call: resolve stores / sample values
   P->>P: tool policy, schema, budget, ledger
-  P->>A: forward with exchanged token (aud=analytics)
+  P->>A: forward with exchanged token (aud=mcp-analytics)
   A-->>O: candidate stores, grounded filter values
   O->>L: structured query plan
   O->>P: run_validated_select(plan)
@@ -512,7 +512,7 @@ Models are **hosted**: Bedrock on AWS and Azure AI Foundry on Azure, reached ove
 ## 11. Observability
 
 - **Signals.** OpenTelemetry traces, metrics and logs from every service, following the GenAI semantic conventions for model calls **[VERIFY current semconv status]**. Export goes to the cloud-native backend (ADOT → X-Ray/CloudWatch, or Azure Monitor) or to Grafana.
-- **Span model.** Run → node → model call / retrieval / tool call / verifier check → human decision (FinAnalytics.md §5.3, PL2). Query API calls carry the trace context, so a warehouse query links back to the conversation.
+- **Span model.** Run → node → model call / retrieval / tool call / verifier check → human decision (Analytics Copilot.md §5.3, PL2). Query API calls carry the trace context, so a warehouse query links back to the conversation.
 - **Content handling.** Prompts and completions are not stored in span attributes. They go redacted to the decision store, keyed by span id, under a retention policy.
 - **Dashboards.**
   - Quality: verifier rejection rate, acceptance and edit distance, eval drift.
@@ -556,7 +556,7 @@ apps/
 services/
   bff/  orchestrator/  intent/  guardrails/  llm-gateway/
   policy-gateway/  approval/  query-api/ (reference)  workers/
-mcp/
+mcp-servers/
   analytics/  operations/  knowledge/  drafts/
 packages/
   schemas/  sql-verifier/  catalogue/  pii/  tracing/  connectors/
@@ -572,7 +572,7 @@ docs/
 
 ## 15. ADR backlog
 
-Decided (D-numbers in FinAnalytics.md §16), to be written up as ADRs:
+Decided (D-numbers in Analytics Copilot.md §16), to be written up as ADRs:
 1. AWS primary, Azure second; GCP deferred (D2).
 2. Hosted models through Bedrock and AI Foundry; small CPU models in-container; laptop uses hosted APIs (D3).
 3. Analytics access through the Query API over Postgres; contract in §8.2 (D4).
@@ -586,5 +586,5 @@ Decided (D-numbers in FinAnalytics.md §16), to be written up as ADRs:
 Still open:
 10. Graph database (Neptune / Cosmos DB vs Neo4j everywhere).
 11. Durable workflow engine (Step Functions / Durable Functions vs Temporal for portability).
-12. Identity provider for the showcase (Cognito vs Keycloak vs bring-your-own IdP).
+12. Identity provider for the showcase (Cognito vs Keycloak vs bring-your-own IdP). **Resolved for the showcase: Keycloak, ADR 0003.**
 13. License and public-repository policy (D11).

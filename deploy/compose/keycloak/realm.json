@@ -1,0 +1,452 @@
+{
+  "realm": "halcyon",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "bruteForceProtected": true,
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "roles": {
+    "realm": [
+      {
+        "name": "analyst"
+      },
+      {
+        "name": "treasury_manager"
+      },
+      {
+        "name": "approver"
+      }
+    ]
+  },
+  "clientScopes": [
+    {
+      "name": "copilot-claims",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "sub",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-sub-mapper",
+          "consentRequired": false,
+          "config": {
+            "access.token.claim": "true"
+          }
+        },
+        {
+          "name": "tenant_id",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "tenant_id",
+            "claim.name": "tenant_id",
+            "jsonType.label": "String",
+            "access.token.claim": "true"
+          }
+        },
+        {
+          "name": "entities",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "entities",
+            "claim.name": "entities",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "access.token.claim": "true"
+          }
+        },
+        {
+          "name": "roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "roles",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "aud-approval-service",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "aud-approval-service",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "approval-service",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "name": "aud-mcp-analytics",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "aud-mcp-analytics",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "mcp-analytics",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "name": "aud-orchestrator",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "aud-orchestrator",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "orchestrator",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "name": "aud-query-api",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "aud-query-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "query-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    }
+  ],
+  "scopeMappings": [
+    {
+      "clientScope": "copilot-claims",
+      "roles": [
+        "analyst",
+        "treasury_manager",
+        "approver"
+      ]
+    }
+  ],
+  "defaultDefaultClientScopes": [],
+  "clients": [
+    {
+      "clientId": "copilot-bff",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": false,
+      "defaultClientScopes": [
+        "copilot-claims"
+      ],
+      "optionalClientScopes": [
+        "aud-orchestrator",
+        "aud-approval-service"
+      ],
+      "secret": "${BFF_CLIENT_SECRET}",
+      "redirectUris": [
+        "http://localhost:3000/auth/callback"
+      ],
+      "webOrigins": [
+        "http://localhost:3000"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "standard.token.exchange.enabled": "true",
+        "post.logout.redirect.uris": "http://localhost:3000/"
+      },
+      "protocolMappers": [
+        {
+          "name": "aud-copilot-bff",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "copilot-bff",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "test-harness",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": false,
+      "defaultClientScopes": [
+        "copilot-claims"
+      ],
+      "optionalClientScopes": [],
+      "protocolMappers": [
+        {
+          "name": "aud-copilot-bff",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "copilot-bff",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "orchestrator",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": false,
+      "defaultClientScopes": [
+        "copilot-claims"
+      ],
+      "optionalClientScopes": [
+        "aud-mcp-analytics"
+      ],
+      "secret": "${ORCHESTRATOR_CLIENT_SECRET}",
+      "attributes": {
+        "standard.token.exchange.enabled": "true"
+      }
+    },
+    {
+      "clientId": "mcp-analytics",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": false,
+      "defaultClientScopes": [
+        "copilot-claims"
+      ],
+      "optionalClientScopes": [
+        "aud-query-api"
+      ],
+      "secret": "${MCP_ANALYTICS_CLIENT_SECRET}",
+      "attributes": {
+        "standard.token.exchange.enabled": "true"
+      }
+    },
+    {
+      "clientId": "query-api",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": false,
+      "defaultClientScopes": [
+        "copilot-claims"
+      ],
+      "optionalClientScopes": [],
+      "secret": "${QUERY_API_CLIENT_SECRET}",
+      "attributes": {
+        "standard.token.exchange.enabled": "true"
+      }
+    },
+    {
+      "clientId": "approval-service",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": false,
+      "defaultClientScopes": [
+        "copilot-claims"
+      ],
+      "optionalClientScopes": [],
+      "secret": "${APPROVAL_CLIENT_SECRET}",
+      "attributes": {
+        "standard.token.exchange.enabled": "true"
+      }
+    }
+  ],
+  "users": [
+    {
+      "id": "26cd9346-28cd-5e6f-b328-f6aca5316a97",
+      "username": "ana.analyst",
+      "firstName": "Ana",
+      "lastName": "Analyst",
+      "email": "ana.analyst@halcyon.example",
+      "emailVerified": true,
+      "enabled": true,
+      "attributes": {
+        "tenant_id": [
+          "halcyon"
+        ],
+        "entities": [
+          "HAL-DE"
+        ]
+      },
+      "realmRoles": [
+        "analyst"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${DEMO_USER_PASSWORD}",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "id": "b3832911-e682-5f88-916b-c00f05bb873d",
+      "username": "ben.analyst",
+      "firstName": "Ben",
+      "lastName": "Analyst",
+      "email": "ben.analyst@halcyon.example",
+      "emailVerified": true,
+      "enabled": true,
+      "attributes": {
+        "tenant_id": [
+          "halcyon"
+        ],
+        "entities": [
+          "HAL-UK"
+        ]
+      },
+      "realmRoles": [
+        "analyst"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${DEMO_USER_PASSWORD}",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "id": "7489e35d-3de5-5f14-b741-709ffce969d3",
+      "username": "maria.manager",
+      "firstName": "Maria",
+      "lastName": "Manager",
+      "email": "maria.manager@halcyon.example",
+      "emailVerified": true,
+      "enabled": true,
+      "attributes": {
+        "tenant_id": [
+          "halcyon"
+        ],
+        "entities": [
+          "HAL-DE",
+          "HAL-UK"
+        ]
+      },
+      "realmRoles": [
+        "treasury_manager"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${DEMO_USER_PASSWORD}",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "id": "d7d52166-ac21-55e5-909f-00cc4550d346",
+      "username": "amit.approver",
+      "firstName": "Amit",
+      "lastName": "Approver",
+      "email": "amit.approver@halcyon.example",
+      "emailVerified": true,
+      "enabled": true,
+      "attributes": {
+        "tenant_id": [
+          "halcyon"
+        ],
+        "entities": [
+          "HAL-DE",
+          "HAL-UK"
+        ]
+      },
+      "realmRoles": [
+        "approver"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${DEMO_USER_PASSWORD}",
+          "temporary": false
+        }
+      ]
+    }
+  ],
+  "components": {
+    "org.keycloak.userprofile.UserProfileProvider": [
+      {
+        "providerId": "declarative-user-profile",
+        "config": {
+          "kc.user.profile.config": [
+            "{\"attributes\": [{\"name\": \"username\", \"displayName\": \"${username}\", \"validations\": {\"length\": {\"min\": 3, \"max\": 255}}}, {\"name\": \"email\", \"displayName\": \"${email}\", \"validations\": {\"email\": {}}}, {\"name\": \"firstName\", \"displayName\": \"${firstName}\", \"validations\": {}}, {\"name\": \"lastName\", \"displayName\": \"${lastName}\", \"validations\": {}}, {\"name\": \"tenant_id\", \"permissions\": {\"view\": [\"admin\"], \"edit\": [\"admin\"]}}, {\"name\": \"entities\", \"multivalued\": true, \"permissions\": {\"view\": [\"admin\"], \"edit\": [\"admin\"]}}]}"
+          ]
+        }
+      }
+    ]
+  }
+}

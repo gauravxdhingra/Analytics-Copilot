@@ -1,0 +1,38 @@
+# Mirrors the fast CI checks. Install with: uv run pre-commit install
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: uv run ruff check
+        language: system
+        types: [python]
+      - id: ruff-format
+        name: ruff format
+        entry: uv run ruff format --check
+        language: system
+        types: [python]
+      - id: mypy
+        name: mypy
+        entry: uv run mypy packages
+        language: system
+        pass_filenames: false
+        types: [python]
+      - id: adr-index
+        name: ADR index
+        entry: uv run check-adr-index docs/adr
+        language: system
+        pass_filenames: false
+        files: ^docs/adr/
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-yaml
+      - id: check-json
+      - id: check-toml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace

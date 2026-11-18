@@ -1,0 +1,78 @@
+[project]
+name = "analytics-copilot"
+version = "0.1.0"
+description = "Governed text-to-SQL treasury assistant."
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.uv.workspace]
+members = ["packages/*", "data/synthetic-generator", "data/eval-sets", "services/*", "mcp-servers/*"]
+
+[tool.uv.sources]
+copilot-schemas = { workspace = true }
+copilot-devtools = { workspace = true }
+copilot-auth = { workspace = true }
+halcyon-world = { workspace = true }
+copilot-query-api = { workspace = true }
+copilot-evals = { workspace = true }
+copilot-models = { workspace = true }
+copilot-tracing = { workspace = true }
+copilot-orchestrator = { workspace = true }
+copilot-catalogue = { workspace = true }
+copilot-sql-verifier = { workspace = true }
+copilot-policy-gateway = { workspace = true }
+copilot-mcp-analytics = { workspace = true }
+copilot-eval-sets = { workspace = true }
+
+[dependency-groups]
+dev = [
+  "copilot-schemas",
+  "copilot-devtools",
+  "copilot-auth",
+  "halcyon-world",
+  "copilot-query-api",
+  "copilot-evals",
+  "copilot-models",
+  "copilot-tracing",
+  "copilot-orchestrator",
+  "copilot-catalogue",
+  "copilot-sql-verifier",
+  "copilot-policy-gateway",
+  "copilot-mcp-analytics",
+  "copilot-eval-sets",
+  "types-pyyaml",
+  "types-jsonschema",
+  "pytest-asyncio>=0.24",
+  "pytest>=8",
+  "hypothesis>=6",
+  "pre-commit>=4",
+  "ruff>=0.6",
+  "mypy>=1.11",
+]
+
+[tool.ruff]
+line-length = 100
+extend-exclude = [".claude", "*.md"]
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "S", "SIM", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests hold long fixture strings and fake credentials on purpose.
+"**/tests/**" = ["S101", "S105", "S106", "S608", "E501"]
+# Gold-set SQL is trusted text assembled from constants and world data, never user input.
+"data/eval-sets/src/**" = ["S608"]
+
+[tool.mypy]
+strict = true
+plugins = ["pydantic.mypy"]
+
+[tool.pytest.ini_options]
+addopts = "--import-mode=importlib"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = [
+  "integration: needs the local Keycloak and Postgres from `make up`",
+  "live: calls a real provider API and needs a key",
+]

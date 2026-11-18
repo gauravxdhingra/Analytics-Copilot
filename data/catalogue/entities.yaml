@@ -1,0 +1,16 @@
+store: treasury.entities
+definition: "One row per legal entity of the group."
+owner: { business: treasury-ops, steward: data-platform }
+grain: [entity_id]
+columns:
+  - { name: entity_id, type: text }
+  - { name: name, type: text }
+  - { name: country, type: character }
+  - { name: currency, type: character, description: "Functional currency" }
+  - { name: timezone, type: text }
+  - { name: approval_limit, type: numeric, description: "Single-payment approval limit in the entity currency" }
+money:
+  - { column: approval_limit, currency_column: currency, sign: "positive", pinned_by: [entity_id] }
+relationships: []
+known_issues: []
+example_questions: ["Approval limit of each entity"]

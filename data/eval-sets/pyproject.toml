@@ -1,0 +1,26 @@
+[project]
+name = "copilot-eval-sets"
+version = "0.1.0"
+description = "Gold sets, authored independently of the system and pinned to a world version."
+requires-python = ">=3.12"
+dependencies = ["copilot-evals", "halcyon-world", "copilot-models", "copilot-query-api", "copilot-auth", "copilot-orchestrator", "copilot-policy-gateway", "httpx>=0.27"]
+
+[project.scripts]
+build-gold-sets = "eval_sets.build:main"
+run-evals = "eval_sets.run:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/eval_sets"]
+
+[tool.uv.sources]
+copilot-evals = { workspace = true }
+halcyon-world = { workspace = true }
+copilot-models = { workspace = true }
+copilot-query-api = { workspace = true }
+copilot-auth = { workspace = true }
+copilot-orchestrator = { workspace = true }
+copilot-policy-gateway = { workspace = true }

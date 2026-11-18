@@ -1,0 +1,23 @@
+# Agent tool policy, version-controlled and reviewed like code (Analytics Copilot.md §5.2).
+# A change here is a behaviour change: it ships only if the eval gates still pass.
+version: 1
+agents:
+  insights.query_planner:
+    tools:
+      - analytics.list_stores
+      - analytics.describe_store
+      - analytics.resolve_business_term
+      - analytics.get_freshness
+      - analytics.run_validated_select:
+          constraints: { max_rows: 5000, max_runtime_s: 30, require_purpose: true }
+          requires_role: [analyst, treasury_manager]
+  insights.narrator:
+    tools: []            # writes the answer from evidence; it gets no tools
+  recon.remittance_extractor:
+    tools: []            # extraction agents read untrusted text and get no tools
+defaults:
+  data_scope: inherit_user
+  max_tool_calls_per_run: 40
+  max_cost_usd_per_run: "2.00"
+  redact: [iban]
+  tainted_columns: [remittance_text]

@@ -1,0 +1,55 @@
+{
+  "tenant_id": "halcyon",
+  "users": [
+    {
+      "id": "26cd9346-28cd-5e6f-b328-f6aca5316a97",
+      "username": "ana.analyst",
+      "first_name": "Ana",
+      "last_name": "Analyst",
+      "roles": [
+        "analyst"
+      ],
+      "entities": [
+        "HAL-DE"
+      ]
+    },
+    {
+      "id": "b3832911-e682-5f88-916b-c00f05bb873d",
+      "username": "ben.analyst",
+      "first_name": "Ben",
+      "last_name": "Analyst",
+      "roles": [
+        "analyst"
+      ],
+      "entities": [
+        "HAL-UK"
+      ]
+    },
+    {
+      "id": "7489e35d-3de5-5f14-b741-709ffce969d3",
+      "username": "maria.manager",
+      "first_name": "Maria",
+      "last_name": "Manager",
+      "roles": [
+        "treasury_manager"
+      ],
+      "entities": [
+        "HAL-DE",
+        "HAL-UK"
+      ]
+    },
+    {
+      "id": "d7d52166-ac21-55e5-909f-00cc4550d346",
+      "username": "amit.approver",
+      "first_name": "Amit",
+      "last_name": "Approver",
+      "roles": [
+        "approver"
+      ],
+      "entities": [
+        "HAL-DE",
+        "HAL-UK"
+      ]
+    }
+  ]
+}

@@ -6,7 +6,7 @@ argument-hint: "<component or change>"
 
 Threat model update for: $ARGUMENTS
 
-Read ARCHITECTURE.md §5 and FinAnalytics.md §10. Existing models live in `docs/threat-model/`.
+Read ARCHITECTURE.md §5 and Analytics Copilot.md §10. Existing models live in `docs/threat-model/`.
 
 1. **Describe the change**: components, data flows, trust boundaries crossed, data classes handled, who can reach it. Add or update a small data-flow diagram (mermaid).
 2. **STRIDE** for the non-LLM surface: one row per threat per element (spoofing, tampering, repudiation, information disclosure, denial of service, elevation of privilege).
