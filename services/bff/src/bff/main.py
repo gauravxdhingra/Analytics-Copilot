@@ -5,6 +5,7 @@ IdP, the approval service and the trace backend over HTTP. With no model key con
 returns a mapped error and everything else (login, drafts, approvals) still works.
 """
 
+import logging
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -54,7 +55,27 @@ class _Late:
         return await self._ready().submit_draft(*args)
 
 
+_log = logging.getLogger("bff")
+
+
+def _scripted_model() -> ModelClient:
+    """A canned model for demos and browser tests: it plans one fixed, still-verified query.
+
+    The numbers and rows still come from the real stack, as the signed-in user; only the
+    language model is replaced. Never selected unless COPILOT_MODEL=scripted is set.
+    """
+    from copilot_models import FakeClient
+    from orchestrator.testing import COUNT_PLAN, narrate, plan, route
+
+    _log.warning("COPILOT_MODEL=scripted: answers use a canned model, not a real one")
+    return FakeClient(
+        [route(), plan(COUNT_PLAN), narrate("There are some booked transactions.")] * 500
+    )
+
+
 def _model() -> ModelClient:
+    if os.environ.get("COPILOT_MODEL") == "scripted":
+        return _scripted_model()
     if os.environ.get("GEMINI_API_KEY"):
         from copilot_models.adapters.gemini import GeminiClient, GeminiSettings
 

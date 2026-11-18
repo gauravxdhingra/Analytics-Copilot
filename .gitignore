@@ -22,3 +22,7 @@ reports/
 
 # Private working notes (interview prep); never pushed
 .private/
+
+# Playwright output
+test-results/
+playwright-report/

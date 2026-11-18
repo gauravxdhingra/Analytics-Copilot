@@ -58,9 +58,26 @@ describe("HowDrawer", () => {
     await waitFor(() => expect(api.getTrace).toHaveBeenCalledWith("a".repeat(32)));
   });
 
+  it("retries while the trace is still being exported, then shows it", async () => {
+    const trace = vi
+      .spyOn(api, "getTrace")
+      .mockRejectedValueOnce(new api.ApiError("NOT_FOUND", 404))
+      .mockResolvedValueOnce([{ span_id: "s1", parent_id: null, name: "agent.run", start_us: 0, duration_us: 5000, attributes: {} }]);
+    render(<HowDrawer answer={answered} onClose={() => {}} retryMs={5} />);
+    expect(await screen.findByText("agent.run")).toBeInTheDocument();
+    expect(trace).toHaveBeenCalledTimes(2);
+  });
+
+  it("gives up after a few tries and says so", async () => {
+    const trace = vi.spyOn(api, "getTrace").mockRejectedValue(new api.ApiError("NOT_FOUND", 404));
+    render(<HowDrawer answer={answered} onClose={() => {}} retryMs={5} />);
+    expect(await screen.findByText(/trace is unavailable/i)).toBeInTheDocument();
+    expect(trace).toHaveBeenCalledTimes(4);
+  });
+
   it("says so when the trace is unavailable, and still shows the rest", async () => {
     vi.spyOn(api, "getTrace").mockRejectedValue(new api.ApiError("UNAVAILABLE", 503));
-    render(<HowDrawer answer={answered} onClose={() => {}} />);
+    render(<HowDrawer answer={answered} onClose={() => {}} retryMs={5} />);
     expect(await screen.findByText(/trace is unavailable/i)).toBeInTheDocument();
     expect(screen.getByText(/SELECT entity_id/)).toBeInTheDocument();
   });

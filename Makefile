@@ -1,4 +1,4 @@
-.PHONY: web-install web-typecheck web-test web-dev lint typecheck test test-integration fmt up down eval eval-baseline eval-copilot seed env
+.PHONY: e2e web-install web-typecheck web-test web-dev lint typecheck test test-integration fmt up down eval eval-baseline eval-copilot seed env
 
 lint:
 	uv run ruff check .
@@ -61,3 +61,8 @@ web-test:
 # UI on :3000, proxying /auth and /api to the BFF on :8000 (start it with `uvicorn bff.main:app`).
 web-dev:
 	cd apps/web && npm run dev
+
+# Real browser, Keycloak, BFF and Postgres; only the model is scripted. Needs `make seed` and the
+# compose stack up. Installs nothing: run `npx playwright install chromium` once beforehand.
+e2e:
+	set -a && . deploy/compose/.env && set +a && cd apps/web && npx playwright test

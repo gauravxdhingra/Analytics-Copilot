@@ -3,20 +3,36 @@ import { getTrace } from "../lib/api";
 import { STEP_LABEL } from "../lib/copy";
 import type { Answer, Span } from "../lib/types";
 
-export function HowDrawer({ answer, onClose }: { answer: Answer; onClose: () => void }) {
+const ATTEMPTS = 4;
+
+/** `retryMs`: spans are exported in batches, so a trace can lag the answer by a second or two. */
+export function HowDrawer({ answer, onClose, retryMs = 1500 }: { answer: Answer; onClose: () => void; retryMs?: number }) {
   const [spans, setSpans] = useState<Span[] | null>(null);
   const [traceFailed, setTraceFailed] = useState(false);
 
   useEffect(() => {
     if (!answer.trace_id) return;
     let live = true;
-    getTrace(answer.trace_id)
-      .then((s) => live && setSpans(s))
-      .catch(() => live && setTraceFailed(true));
+    const traceId = answer.trace_id;
+    (async () => {
+      for (let attempt = 1; live; attempt++) {
+        try {
+          const found = await getTrace(traceId);
+          if (live) setSpans(found);
+          return;
+        } catch {
+          if (attempt >= ATTEMPTS) {
+            if (live) setTraceFailed(true);
+            return;
+          }
+          await new Promise((resolve) => setTimeout(resolve, retryMs));
+        }
+      }
+    })();
     return () => {
       live = false;
     };
-  }, [answer.trace_id]);
+  }, [answer.trace_id, retryMs]);
 
   const versions = answer.agent_result?.versions ?? {};
   const origin = spans && spans.length > 0 ? Math.min(...spans.map((s) => s.start_us)) : 0;
@@ -76,6 +92,7 @@ export function HowDrawer({ answer, onClose }: { answer: Answer; onClose: () => 
       <section>
         <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Trace</h3>
         {traceFailed && <p className="text-xs text-amber-700">The trace is unavailable right now.</p>}
+        {!traceFailed && answer.trace_id && !spans && <p className="text-xs text-slate-500">Collecting the trace…</p>}
         {!traceFailed && !answer.trace_id && <p className="text-xs text-slate-500">No trace was recorded.</p>}
         {spans && spans.length === 0 && <p className="text-xs text-slate-500">No spans yet.</p>}
         {spans && spans.length > 0 && (
