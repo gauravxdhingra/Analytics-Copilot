@@ -10,6 +10,7 @@ dependencies = [
   "copilot-tracing",
   "fastapi>=0.115",
   "pydantic>=2.7",
+  "uvicorn>=0.30",
 ]
 
 [build-system]

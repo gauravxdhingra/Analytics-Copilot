@@ -41,7 +41,8 @@ class OidcClient:
         self._config = config
         self._http = http
         self._keys = keys
-        self._base = f"{config.issuer}/protocol/openid-connect"
+        self._base = f"{config.issuer}/protocol/openid-connect"  # what the browser is sent to
+        self._back = f"{config.back_issuer}/protocol/openid-connect"  # what this process calls
 
     def authorization_url(
         self,
@@ -72,7 +73,7 @@ class OidcClient:
     async def _token_request(self, form: dict[str, str]) -> TokenSet:
         try:
             response = await self._http.post(
-                f"{self._base}/token",
+                f"{self._back}/token",
                 data=form,
                 auth=(self._config.client_id, self._config.client_secret),
             )

@@ -467,6 +467,7 @@ dependencies = [
     { name = "copilot-tracing" },
     { name = "fastapi" },
     { name = "pydantic" },
+    { name = "uvicorn" },
 ]
 
 [package.metadata]
@@ -477,6 +478,7 @@ requires-dist = [
     { name = "copilot-tracing", editable = "packages/tracing" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "pydantic", specifier = ">=2.7" },
+    { name = "uvicorn", specifier = ">=0.30" },
 ]
 
 [[package]]

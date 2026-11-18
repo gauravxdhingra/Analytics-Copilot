@@ -1,4 +1,4 @@
-.PHONY: e2e web-install web-typecheck web-test web-dev lint typecheck test test-integration fmt up down eval eval-baseline eval-copilot seed env
+.PHONY: demo logs e2e web-install web-typecheck web-test web-dev lint typecheck test test-integration fmt up down eval eval-baseline eval-copilot seed env
 
 lint:
 	uv run ruff check .
@@ -24,7 +24,7 @@ ENV = set -a && . deploy/compose/.env && set +a
 
 # Create deploy/compose/.env with fresh random secrets (never overwrites an existing one).
 env:
-	python3 deploy/compose/gen_env.py
+	uv run python deploy/compose/gen_env.py
 
 # Load the synthetic world into the running Postgres, then create roles and row-level security.
 seed:
@@ -46,8 +46,26 @@ eval-baseline:
 eval-copilot:
 	$(ENV) && uv run run-evals copilot --mode $(MODE) --out reports --enforce
 
-up down:
-	@echo "'$@' is not implemented yet (see docs/stages/V1-vertical-slice.md)"; exit 1
+COMPOSE = docker compose -f deploy/compose/compose.yaml
+
+# The whole stack: Postgres, Keycloak, Jaeger, a bootstrap job, the approval service, the BFF and
+# the UI. Creates deploy/compose/.env with random secrets on first run. UI: http://localhost:3000
+up:
+	uv run python deploy/compose/gen_env.py
+	$(COMPOSE) up -d --build --wait
+	@echo "UI http://localhost:3000   Keycloak http://localhost:8081   Traces http://localhost:16686"
+
+down:
+	$(COMPOSE) down
+
+logs:
+	$(COMPOSE) logs -f --tail=100
+
+# A demo that needs no model key: answers use a canned model. Everything else is real.
+demo:
+	COPILOT_MODEL=scripted $(MAKE) up
+	@echo "Sign in as ana.analyst (HAL-DE), ben.analyst (HAL-UK), maria.manager (both) or amit.approver."
+	@echo "Password: DEMO_USER_PASSWORD in deploy/compose/.env"
 
 web-install:
 	cd apps/web && npm ci --no-audit --no-fund

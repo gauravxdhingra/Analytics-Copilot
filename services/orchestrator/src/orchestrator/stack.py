@@ -51,7 +51,10 @@ async def local_stack(
 ) -> AsyncIterator[LocalStack]:
     keycloak = env.get("KEYCLOAK_URL", "http://localhost:8081")
     issuer = f"{keycloak}/realms/halcyon"
-    jwks = f"{issuer}/protocol/openid-connect/certs"
+    back = (
+        f"{env.get('KEYCLOAK_INTERNAL_URL', keycloak)}/realms/halcyon"  # server-to-server address
+    )
+    jwks = f"{back}/protocol/openid-connect/certs"
     host = env.get("POSTGRES_HOST", "localhost:5433")
     settings = Settings(
         issuer=issuer,
@@ -77,7 +80,7 @@ async def local_stack(
                 query_api=HttpQueryApi(query_http, inject=tracing.inject if tracing else None),
                 verifier=CatalogueVerifier(Verifier(catalogue)),
                 exchanger=TokenExchangeClient(
-                    token_url=f"{issuer}/protocol/openid-connect/token",
+                    token_url=f"{back}/protocol/openid-connect/token",
                     client_id="mcp-analytics",
                     client_secret=env["MCP_ANALYTICS_CLIENT_SECRET"],
                     timeout_seconds=5.0,

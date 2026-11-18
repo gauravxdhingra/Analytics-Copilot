@@ -2,7 +2,7 @@
 
 Enterprise treasury assistant: a global chatbot in a web app that answers questions over governed data (governed text-to-SQL), explains how it got each answer, and drafts work for humans to approve. It reaches data and tools only through MCP servers behind a policy gateway. Every step is traced.
 
-**Status:** specification only. No code yet. Next is Stage S0 (see Analytics Copilot.md §14).
+**Status:** the V1 vertical slice is built and runs end to end (`make demo`); the rest of the specification is still design only. Plan: `docs/stages/V1-vertical-slice.md`.
 
 ## Source of truth
 
@@ -46,13 +46,21 @@ Python 3.12 managed with `uv`; Pydantic v2; LangGraph; FastAPI; sqlglot; OR-Tool
 
 ## Commands
 
-Not created yet. S0 adds a root `Makefile`; then fill in the real commands here.
+Run from the repo root. Python goes through `uv`; the UI is in `apps/web` (Node 24). Integration targets read `deploy/compose/.env` (created by `make env`, git-ignored).
 
 | Target | Purpose |
 |---|---|
-| `make up` / `make down` | Local stack (Docker Compose) |
-| `make lint` / `make typecheck` / `make test` | Quality gates |
-| `make eval` | Eval suite (release gate) |
+| `make up` / `make down` / `make logs` | Whole stack in Docker Compose (UI on :3000). `make up` creates `.env` with random secrets on first run |
+| `make demo` | `make up` with a canned model, so no API key is needed |
+| `make lint` / `make typecheck` / `make test` | Quality gates. `typecheck` runs mypy per project plus the UI; `test` runs Python and UI unit tests |
+| `make test-integration` | Needs the stack's Postgres and Keycloak running |
+| `make seed` | Load the synthetic world and provision database roles (host-side) |
+| `make eval` | Eval gates; proves they pass a ceiling and fail a floor |
+| `make eval-baseline` / `make eval-copilot` | Record or replay model calls (`MODE=record` needs `GEMINI_API_KEY`) |
+| `make e2e` | Playwright against the real stack (`E2E_STACK=compose` to target running containers) |
+| `make web-dev` / `web-test` / `web-typecheck` | UI dev server on :3000 (proxies to the BFF on :8000), UI tests |
+
+If tokens look expired on creation, check clock drift between the Docker VM and the host: `docker run --rm --privileged alpine hwclock -s`.
 
 ## How to work here
 

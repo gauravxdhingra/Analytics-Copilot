@@ -220,21 +220,31 @@ def create_app(deps: BffDeps, lifespan: Any = None) -> FastAPI:
         params = request.query_params
         state, code = params.get("state"), params.get("code")
         bound = request.cookies.get(cfg.login_cookie)
-        if "error" in params or not state or not code or bound != state:
+
+        def refuse(reason: str) -> JSONResponse:
+            _log.warning("login refused: %s", reason)  # a fixed reason code, never a value
             return _error("LOGIN_FAILED")
+
+        if "error" in params:
+            return refuse("idp_error")
+        if not state or not code:
+            return refuse("missing_parameter")
+        if bound != state:
+            return refuse("login_binding")  # the browser that started the login did not finish it
         pending = deps.sessions.take_pending(state)
         if pending is None:
-            return _error("LOGIN_FAILED")  # unknown, expired or replayed
+            return refuse("unknown_or_expired_state")  # unknown, expired or replayed
         try:
             tokens = await deps.oidc.exchange_code(code, pending.verifier)
             if tokens.id_token is None:
-                return _error("LOGIN_FAILED")
+                return refuse("no_id_token")
             deps.oidc.verify_id_token(tokens.id_token, pending.nonce)
             principal = await asyncio.to_thread(deps.access_validator.validate, tokens.access_token)
         except OidcError as exc:
+            _log.warning("login refused: %s", exc.code)
             return _error("UNAVAILABLE" if exc.code.startswith("idp_") else "LOGIN_FAILED")
-        except AuthError:
-            return _error("LOGIN_FAILED")
+        except AuthError as exc:
+            return refuse(f"access_token_{exc.code}")
         old = request.cookies.get(cfg.session_cookie)
         if old:
             deps.sessions.delete(old)  # a new session id on every login: no fixation

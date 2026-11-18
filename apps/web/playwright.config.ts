@@ -12,7 +12,8 @@ export default defineConfig({
   retries: 0,
   workers: 1,
   use: { baseURL: "http://localhost:3000", trace: "retain-on-failure" },
-  webServer: [
+  // E2E_STACK=compose: the stack is already running in containers (make demo), start nothing.
+  webServer: process.env.E2E_STACK === "compose" ? undefined : [
     {
       command: "uv run uvicorn bff.main:app --port 8000",
       cwd: root,

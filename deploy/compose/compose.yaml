@@ -36,6 +36,103 @@ services:
       - ./keycloak/realm.json:/opt/keycloak/data/import/realm.json:ro
     ports:
       - "127.0.0.1:8081:8080"
+    healthcheck:
+      # The image has no curl: speak HTTP over a bash socket.
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080 && printf 'GET /realms/halcyon HTTP/1.0\\r\\n\\r\\n' >&3 && head -n1 <&3 | grep -q '200'"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
+  bootstrap:
+    # One-shot: seed the synthetic warehouse and create every database role. Uses the owner
+    # credentials; no long-running service holds them.
+    build:
+      context: ../..
+      dockerfile: deploy/docker/python.Dockerfile
+    image: analytics-copilot/python:local
+    command: ["python", "deploy/compose/bootstrap.py"]
+    restart: "no"
+    environment:
+      POSTGRES_HOST: postgres:5432
+      POSTGRES_OWNER_PASSWORD: ${POSTGRES_OWNER_PASSWORD:?}
+      QUERY_DB_PASSWORD: ${QUERY_DB_PASSWORD:?}
+      GATEWAY_DB_PASSWORD: ${GATEWAY_DB_PASSWORD:?}
+      DRAFTS_DB_PASSWORD: ${DRAFTS_DB_PASSWORD:?}
+      APPROVAL_DB_PASSWORD: ${APPROVAL_DB_PASSWORD:?}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  approval:
+    image: analytics-copilot/python:local
+    command: ["uvicorn", "approval.main:app", "--host", "0.0.0.0", "--port", "8002"]
+    environment: &service-env
+      KEYCLOAK_URL: http://localhost:8081 # the issuer: what the browser and tokens say
+      KEYCLOAK_INTERNAL_URL: http://keycloak:8080 # where services reach it
+      POSTGRES_HOST: postgres:5432
+      OTLP_ENDPOINT: http://jaeger:4318
+      GATEWAY_DB_PASSWORD: ${GATEWAY_DB_PASSWORD:?}
+      APPROVAL_DB_PASSWORD: ${APPROVAL_DB_PASSWORD:?}
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8002/healthz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+      keycloak:
+        condition: service_healthy
+      jaeger:
+        condition: service_started
+
+  bff:
+    image: analytics-copilot/python:local
+    command: ["uvicorn", "bff.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      <<: *service-env
+      PUBLIC_URL: http://localhost:3000
+      APPROVAL_URL: http://approval:8002
+      JAEGER_URL: http://jaeger:16686
+      # Empty by default. `scripted` uses a canned model; with a key, set GEMINI_API_KEY.
+      COPILOT_MODEL: ${COPILOT_MODEL:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      QUERY_DB_PASSWORD: ${QUERY_DB_PASSWORD:?}
+      DRAFTS_DB_PASSWORD: ${DRAFTS_DB_PASSWORD:?}
+      BFF_CLIENT_SECRET: ${BFF_CLIENT_SECRET:?}
+      ORCHESTRATOR_CLIENT_SECRET: ${ORCHESTRATOR_CLIENT_SECRET:?}
+      MCP_ANALYTICS_CLIENT_SECRET: ${MCP_ANALYTICS_CLIENT_SECRET:?}
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8000/healthz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    depends_on:
+      approval:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/web.Dockerfile
+    image: analytics-copilot/web:local
+    ports:
+      - "127.0.0.1:3000:8080"
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      bff:
+        condition: service_healthy
 
   jaeger:
     # Trace UI and OTLP collector for the laptop profile. In-memory: traces are not persisted.

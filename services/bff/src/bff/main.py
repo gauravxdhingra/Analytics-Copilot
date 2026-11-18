@@ -86,7 +86,7 @@ def _model() -> ModelClient:
 def build_app(env: dict[str, str] | None = None) -> FastAPI:
     env = dict(os.environ) if env is None else env
     config = BffConfig.from_env(env)
-    jwks = JwksKeyProvider(f"{config.issuer}/protocol/openid-connect/certs")
+    jwks = JwksKeyProvider(f"{config.back_issuer}/protocol/openid-connect/certs")
     late = _Late()
     host = env.get("POSTGRES_HOST", "localhost:5433")
     tracing = Tracing(
@@ -105,7 +105,7 @@ def build_app(env: dict[str, str] | None = None) -> FastAPI:
         ),
         access_validator=TokenValidator(issuer=config.issuer, audience="copilot-bff", keys=jwks),
         broker=ExchangeBroker(
-            token_url=f"{config.issuer}/protocol/openid-connect/token",
+            token_url=f"{config.back_issuer}/protocol/openid-connect/token",
             bff_secret=env["BFF_CLIENT_SECRET"],
             orchestrator_secret=env["ORCHESTRATOR_CLIENT_SECRET"],
         ),

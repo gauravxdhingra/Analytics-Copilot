@@ -8,6 +8,9 @@ class BffConfig:
     issuer: str
     client_secret: str
     client_id: str = "copilot-bff"
+    # Where this process reaches the IdP. Tokens are still issued for `issuer` (the browser's
+    # view), so in containers the two differ: the browser uses localhost, services use the network.
+    internal_issuer: str | None = None
     # The origin the browser uses. The UI dev server proxies /auth and /api here, so the browser
     # only ever talks to one origin and no CORS is needed.
     public_url: str = "http://localhost:3000"
@@ -25,14 +28,20 @@ class BffConfig:
     login_cookie: str = "copilot_login"
 
     @property
+    def back_issuer(self) -> str:
+        return self.internal_issuer or self.issuer
+
+    @property
     def redirect_uri(self) -> str:
         return f"{self.public_url}/auth/callback"
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] = os.environ) -> "BffConfig":
         keycloak = env.get("KEYCLOAK_URL", "http://localhost:8081")
+        internal = env.get("KEYCLOAK_INTERNAL_URL")
         return cls(
             issuer=f"{keycloak}/realms/halcyon",
+            internal_issuer=f"{internal}/realms/halcyon" if internal else None,
             client_secret=env["BFF_CLIENT_SECRET"],
             public_url=env.get("PUBLIC_URL", "http://localhost:3000"),
             cookie_secure=env.get("COOKIE_SECURE", "false").lower() == "true",

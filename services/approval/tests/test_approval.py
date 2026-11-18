@@ -261,3 +261,8 @@ async def test_the_queue_lists_only_submitted_drafts_in_the_approvers_entities(
 async def test_the_queue_needs_the_approver_role(app: FastAPI, token_for: Token) -> None:
     response = await _get(app, "/v1/queue", token_for(roles=["analyst"]))
     assert response.status_code == 403
+
+
+async def test_health_needs_no_token_and_reveals_nothing(app: FastAPI) -> None:
+    response = await _get(app, "/healthz", None)
+    assert response.status_code == 200 and response.json() == {"status": "ok"}

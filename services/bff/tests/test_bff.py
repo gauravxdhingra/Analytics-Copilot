@@ -501,3 +501,31 @@ async def test_security_headers_are_set_and_api_responses_are_never_cached(
 
 async def test_the_health_check_needs_no_login(client: Http) -> None:
     assert (await client.get("/healthz")).json() == {"status": "ok"}
+
+
+@pytest.mark.parametrize(
+    ("breakage", "reason"),
+    [
+        ("no_cookie", "login_binding"),
+        ("no_code", "missing_parameter"),
+        ("bad_state", "login_binding"),
+    ],
+)
+async def test_a_refused_login_logs_why_without_logging_secrets(
+    client: Http, idp: FakeIdp, caplog: pytest.LogCaptureFixture, breakage: str, reason: str
+) -> None:
+    start = await client.get("/auth/login")
+    query = parse_qs(urlparse(start.headers["location"]).query)
+    code = idp.issue_code("ana", nonce=query["nonce"][0], challenge=query["code_challenge"][0])
+    params = {"code": code, "state": query["state"][0]}
+    if breakage == "no_cookie":
+        client.cookies.clear()
+    elif breakage == "no_code":
+        del params["code"]
+    else:
+        params["state"] = "forged"
+    with caplog.at_level("WARNING", logger="bff"):
+        await client.get("/auth/callback", params=params)
+    text = " ".join(r.getMessage() for r in caplog.records)
+    assert reason in text
+    assert code not in text and query["state"][0] not in text and "forged" not in text

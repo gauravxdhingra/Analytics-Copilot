@@ -178,6 +178,10 @@ def create_app(
             raise _Refused("NOT_FOUND")
         return draft
 
+    @app.get("/healthz")
+    async def healthz() -> dict[str, str]:
+        return {"status": "ok"}  # liveness only: no dependency calls, nothing to leak
+
     @app.get("/v1/queue")
     async def queue(who: Caller) -> JSONResponse:
         require_role(who)
