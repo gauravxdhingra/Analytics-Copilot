@@ -65,6 +65,18 @@ claims_scope = {
     "protocolMappers": [
         # Supplying our own clientScopes drops Keycloak's built-in `basic` scope, so emit sub here.
         mapper("sub", "oidc-sub-mapper", {"access.token.claim": "true"}),
+        # Display name for the UI; the same reason as `sub`: the built-in `profile` scope is gone.
+        mapper(
+            "preferred_username",
+            "oidc-usermodel-property-mapper",
+            {
+                "user.attribute": "username",
+                "claim.name": "preferred_username",
+                "jsonType.label": "String",
+                "access.token.claim": "true",
+                "id.token.claim": "true",
+            },
+        ),
         mapper(
             "tenant_id",
             "oidc-usermodel-attribute-mapper",

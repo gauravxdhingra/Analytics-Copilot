@@ -408,3 +408,31 @@ async def test_the_draft_call_counts_against_the_tool_budget(gateway: FakeGatewa
     )
     answer = await orchestrator.run(DRAFT_QUESTION, make_ctx())
     assert answer.draft_id is None and answer.draft_error == "budget" and len(gateway.calls) == 1
+
+
+# --- progress reporting (for streaming UIs) -----------------------------------------------------------
+
+
+async def test_progress_is_reported_for_each_step_in_order(gateway: FakeGateway) -> None:
+    gateway.queue(_allowed())
+    orchestrator, _ = build([route(), plan(), narrate("There are 776.")], gateway)
+    seen: list[str] = []
+
+    async def progress(step: str) -> None:
+        seen.append(step)
+
+    answer = await orchestrator.run(QUESTION, make_ctx(), progress=progress)
+    assert answer.status is AnswerStatus.ANSWERED
+    assert seen == ["route", "plan", "render", "execute", "analyse", "narrate", "finish"]
+
+
+async def test_a_failing_progress_callback_never_breaks_the_run(gateway: FakeGateway) -> None:
+    gateway.queue(_allowed())
+    orchestrator, _ = build([route(), plan(), narrate("There are 776.")], gateway)
+
+    async def broken(step: str) -> None:
+        raise RuntimeError("client went away")
+
+    assert (
+        await orchestrator.run(QUESTION, make_ctx(), progress=broken)
+    ).status is AnswerStatus.ANSWERED

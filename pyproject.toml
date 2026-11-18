@@ -20,6 +20,7 @@ copilot-mcp-common = { workspace = true }
 copilot-mcp-drafts = { workspace = true }
 copilot-drafts = { workspace = true }
 copilot-approval = { workspace = true }
+copilot-bff = { workspace = true }
 copilot-tracing = { workspace = true }
 copilot-orchestrator = { workspace = true }
 copilot-catalogue = { workspace = true }
@@ -41,6 +42,7 @@ dev = [
   "copilot-mcp-drafts",
   "copilot-drafts",
   "copilot-approval",
+  "copilot-bff",
   "copilot-tracing",
   "copilot-orchestrator",
   "copilot-catalogue",

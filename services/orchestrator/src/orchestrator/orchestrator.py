@@ -9,7 +9,7 @@ and hard caps bound the run. A model can explain a refusal; it can never overrid
 import asyncio
 import json
 from collections.abc import Awaitable, Callable
-from contextlib import nullcontext
+from contextlib import nullcontext, suppress
 from decimal import Decimal
 from typing import Any, Protocol, TypeVar
 
@@ -37,6 +37,9 @@ _TABLE_ROWS_FOR_NARRATOR = 50
 _REPAIRABLE = {"SYNTAX", "UNKNOWN_OBJECT", "BAD_PARAMS", "NOT_SELECT"}
 
 T = TypeVar("T", bound=BaseModel)
+
+
+Progress = Callable[[str], Awaitable[None]]
 
 
 class ToolCaller(Protocol):
@@ -118,9 +121,9 @@ class InsightsOrchestrator:
 
     # -- public --
 
-    async def run(self, question: str, ctx: RunContext) -> Answer:
+    async def run(self, question: str, ctx: RunContext, progress: Progress | None = None) -> Answer:
         if self._tracing is None:
-            return await self._run(question, ctx)
+            return await self._run(question, ctx, progress)
         versions = {
             **self._versions,
             "catalogue": self._catalogue.version,
@@ -136,7 +139,7 @@ class InsightsOrchestrator:
             versions=versions,
         ) as info:
             ctx.trace_id = info.trace_id  # ledger rows and spans share one id
-            answer = await self._run(question, ctx)
+            answer = await self._run(question, ctx, progress)
             self._tracing.annotate(
                 **{
                     "copilot.outcome": answer.status.value,
@@ -147,8 +150,10 @@ class InsightsOrchestrator:
             )
         return answer.model_copy(update={"trace_id": info.trace_id})
 
-    async def _run(self, question: str, ctx: RunContext) -> Answer:
-        graph = self._build(ctx)
+    async def _run(
+        self, question: str, ctx: RunContext, progress: Progress | None = None
+    ) -> Answer:
+        graph = self._build(ctx, progress)
         try:
             async with asyncio.timeout(self._caps.max_wall_clock_s):
                 result = await graph.ainvoke(
@@ -165,7 +170,7 @@ class InsightsOrchestrator:
 
     # -- graph --
 
-    def _build(self, ctx: RunContext) -> Any:
+    def _build(self, ctx: RunContext, progress: Progress | None = None) -> Any:
         async def execute(state: _State) -> dict[str, Any]:
             return await self._execute(state, ctx)
 
@@ -173,14 +178,14 @@ class InsightsOrchestrator:
             return await self._draft(state, ctx)
 
         graph = StateGraph(_State)
-        graph.add_node("route", self._traced("route", self._route))
-        graph.add_node("plan", self._traced("plan", self._plan))
-        graph.add_node("render", self._traced("render", self._render))
-        graph.add_node("execute", self._traced("execute", execute))
-        graph.add_node("analyse", self._traced("analyse", self._analyse))
-        graph.add_node("narrate", self._traced("narrate", self._narrate))
-        graph.add_node("draft", self._traced("draft", draft))
-        graph.add_node("finish", self._traced("finish", self._finish))
+        graph.add_node("route", self._traced("route", self._route, progress))
+        graph.add_node("plan", self._traced("plan", self._plan, progress))
+        graph.add_node("render", self._traced("render", self._render, progress))
+        graph.add_node("execute", self._traced("execute", execute, progress))
+        graph.add_node("analyse", self._traced("analyse", self._analyse, progress))
+        graph.add_node("narrate", self._traced("narrate", self._narrate, progress))
+        graph.add_node("draft", self._traced("draft", draft, progress))
+        graph.add_node("finish", self._traced("finish", self._finish, progress))
         graph.add_edge(START, "route")
         graph.add_conditional_edges(
             "route", lambda s: "finish" if s.status else "plan", ["plan", "finish"]
@@ -209,11 +214,18 @@ class InsightsOrchestrator:
         return graph.compile()
 
     def _traced(
-        self, name: str, node: Callable[[_State], Awaitable[dict[str, Any]]]
+        self,
+        name: str,
+        node: Callable[[_State], Awaitable[dict[str, Any]]],
+        progress: Progress | None = None,
     ) -> Any:  # handed to LangGraph, whose node typing is overloaded
         """Wrap a node in an `agent.node` span carrying its attempt number."""
 
         async def run(state: _State) -> dict[str, Any]:
+            if progress is not None:
+                # A client that went away must never break a run.
+                with suppress(Exception):
+                    await progress(name)
             if self._tracing is None:
                 return await node(state)
             with self._tracing.node(name, iteration=state.attempts):

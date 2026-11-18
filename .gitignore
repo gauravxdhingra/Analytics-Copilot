@@ -2,6 +2,7 @@
 # Secrets and local state
 .env
 .env.*
+!.env.example
 *.pem
 .DS_Store
 
@@ -18,3 +19,6 @@ node_modules/
 dist/
 .hypothesis/
 reports/
+
+# Private working notes (interview prep); never pushed
+.private/

@@ -1,4 +1,4 @@
-.PHONY: lint typecheck test test-integration fmt up down eval eval-baseline eval-copilot seed
+.PHONY: lint typecheck test test-integration fmt up down eval eval-baseline eval-copilot seed env
 
 lint:
 	uv run ruff check .
@@ -19,6 +19,10 @@ test-integration:
 	set -a && . deploy/compose/.env && set +a && uv run pytest packages data services mcp-servers -m integration
 
 ENV = set -a && . deploy/compose/.env && set +a
+
+# Create deploy/compose/.env with fresh random secrets (never overwrites an existing one).
+env:
+	python3 deploy/compose/gen_env.py
 
 # Load the synthetic world into the running Postgres, then create roles and row-level security.
 seed:
