@@ -1,4 +1,4 @@
-.PHONY: lint typecheck test test-integration fmt up down eval eval-baseline eval-copilot seed env
+.PHONY: web-install web-typecheck web-test web-dev lint typecheck test test-integration fmt up down eval eval-baseline eval-copilot seed env
 
 lint:
 	uv run ruff check .
@@ -11,9 +11,11 @@ fmt:
 typecheck:
 	# One run per project: several tests/ and conftest.py files share names across projects.
 	@for d in packages/* data/synthetic-generator data/eval-sets services/* mcp-servers/*; do uv run mypy $$d || exit 1; done
+	$(MAKE) web-typecheck
 
 test:
 	uv run pytest packages data services mcp-servers -m 'not integration'
+	$(MAKE) web-test
 
 test-integration:
 	set -a && . deploy/compose/.env && set +a && uv run pytest packages data services mcp-servers -m integration
@@ -46,3 +48,16 @@ eval-copilot:
 
 up down:
 	@echo "'$@' is not implemented yet (see docs/stages/V1-vertical-slice.md)"; exit 1
+
+web-install:
+	cd apps/web && npm ci --no-audit --no-fund
+
+web-typecheck:
+	cd apps/web && npm run --silent typecheck
+
+web-test:
+	cd apps/web && npm test --silent
+
+# UI on :3000, proxying /auth and /api to the BFF on :8000 (start it with `uvicorn bff.main:app`).
+web-dev:
+	cd apps/web && npm run dev
