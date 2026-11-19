@@ -9,6 +9,7 @@ from typing import Any, Protocol
 
 from copilot_auth import TokenValidator
 from copilot_memory import MemoryStore, Owner, Preference, Turn
+from copilot_resilience import Bulkhead, Overloaded
 from orchestrator import Answer, AnswerStatus, InsightsOrchestrator
 from policy_gateway import Allowed, Denied, Gateway, RunContext
 
@@ -52,12 +53,14 @@ class OrchestratorCopilot:
         broker: TokenBroker,
         mcp_validator: TokenValidator,
         memory: MemoryStore | None = None,
+        max_concurrent_asks: int = 8,
     ) -> None:
         self._orchestrator = orchestrator
         self._gateway = gateway
         self._broker = broker
         self._validator = mcp_validator
         self._memory = memory
+        self._asks = Bulkhead("insights", limit=max_concurrent_asks)
 
     async def _context(self, session: Session) -> RunContext:
         try:
@@ -82,6 +85,22 @@ class OrchestratorCopilot:
         # Both parts of the owner come from the validated session, never from the request.
         owner = Owner(tenant_id=session.tenant_id, user_id=session.subject)
         conversation = conversation_id if _valid_conversation(conversation_id) else None
+        try:
+            # A burst beyond the cap is refused with a mapped code rather than queued without bound.
+            return await self._asks.call(
+                lambda: self._answer(session, owner, conversation, question, progress)
+            )
+        except Overloaded:
+            raise CopilotError("unavailable") from None
+
+    async def _answer(
+        self,
+        session: Session,
+        owner: Owner,
+        conversation: str | None,
+        question: str,
+        progress: Progress,
+    ) -> dict[str, Any]:
         history, preferences = await self._recall(owner, conversation)
         answer = await self._orchestrator.run(
             question,

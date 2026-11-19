@@ -7,10 +7,12 @@ unguarded path.
 
 import asyncio
 import re
-from collections.abc import Callable
-from typing import Any, cast
+import time
+from collections.abc import Awaitable, Callable
+from typing import Any, TypeVar, cast
 
 import httpx2
+from copilot_resilience import CircuitBreaker, CircuitOpen
 from mcp import Client
 from mcp.client.streamable_http import streamable_http_client
 from mcp.shared.exceptions import MCPError
@@ -19,6 +21,16 @@ from mcp_types import RequestParamsMeta
 from policy_gateway.gateway import UpstreamError
 
 _CODE = re.compile(r"[A-Z][A-Z_]{2,40}\b")
+T = TypeVar("T")
+
+
+def _is_outage(exc: Exception) -> bool:
+    """Only an unreachable or slow server opens the circuit; a rejected token or a tool error is
+    about this caller or this question, not an outage."""
+    return isinstance(exc, UpstreamError) and exc.code in {
+        "UPSTREAM_UNAVAILABLE",
+        "UPSTREAM_TIMEOUT",
+    }
 
 
 def _leaves(exc: BaseException) -> list[BaseException]:
@@ -63,8 +75,13 @@ class McpUpstream:
         timeout_seconds: float = 30.0,
         http_factory: Callable[[str, str], httpx2.AsyncClient] | None = None,
         trace_context: Callable[[], dict[str, str]] | None = None,
+        failure_threshold: int = 5,
+        reset_seconds: float = 30.0,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._trace_context = trace_context
+        self._breaker_settings = (failure_threshold, reset_seconds, clock)
+        self._breakers: dict[str, CircuitBreaker] = {}
         self._urls = urls
         self._timeout = timeout_seconds
         self._http_factory = http_factory
@@ -81,9 +98,36 @@ class McpUpstream:
             )
         return Client(streamable_http_client(self._urls[server], http_client=http))
 
+    def _breaker(self, server: str) -> CircuitBreaker:
+        """One breaker per tool server, so a failing server fails fast and the others carry on."""
+        if server not in self._breakers:
+            threshold, reset, clock = self._breaker_settings
+            self._breakers[server] = CircuitBreaker(
+                server,
+                failure_threshold=threshold,
+                reset_seconds=reset,
+                counts_as_failure=_is_outage,
+                clock=clock,
+            )
+        return self._breakers[server]
+
+    async def _guarded(self, server: str, work: Callable[[], Awaitable[T]]) -> T:
+        try:
+            return await self._breaker(server).call(work)
+        except CircuitOpen:
+            raise UpstreamError("UPSTREAM_UNAVAILABLE", "CIRCUIT_OPEN") from None
+
     async def schema(self, tool: str, token: str) -> dict[str, Any]:
         if tool in self._schemas:
             return self._schemas[tool]
+        return await self._guarded(tool.partition(".")[0], lambda: self._schema_once(tool, token))
+
+    async def call(self, tool: str, args: dict[str, Any], token: str) -> dict[str, Any]:
+        return await self._guarded(
+            tool.partition(".")[0], lambda: self._call_once(tool, args, token)
+        )
+
+    async def _schema_once(self, tool: str, token: str) -> dict[str, Any]:
         server = tool.partition(".")[0]
         try:
             async with self._open(server, token) as client:
@@ -98,7 +142,7 @@ class McpUpstream:
             raise UpstreamError("UPSTREAM_ERROR", "TOOL_MISSING")
         return self._schemas[tool]
 
-    async def call(self, tool: str, args: dict[str, Any], token: str) -> dict[str, Any]:
+    async def _call_once(self, tool: str, args: dict[str, Any], token: str) -> dict[str, Any]:
         server, _, name = tool.partition(".")
         try:
             async with self._open(server, token) as client:

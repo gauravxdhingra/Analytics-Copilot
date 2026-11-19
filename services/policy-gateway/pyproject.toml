@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Policy enforcement point between every agent and every MCP server (PL1)."
 requires-python = ">=3.12"
 dependencies = [
+  "copilot-resilience",
   "copilot-auth",
   "copilot-schemas",
   "copilot-tracing",
@@ -23,6 +24,7 @@ build-backend = "hatchling.build"
 packages = ["src/policy_gateway"]
 
 [tool.uv.sources]
+copilot-resilience = { workspace = true }
 copilot-auth = { workspace = true }
 copilot-schemas = { workspace = true }
 copilot-tracing = { workspace = true }

@@ -12,6 +12,7 @@ import logging
 from collections.abc import Mapping
 
 from copilot_models import ModelClient, ModelError, ModelErrorCode, ModelRequest, ModelResponse
+from copilot_models.resilient import resilient
 from copilot_models.selection import select_live_model
 
 _log = logging.getLogger("bff")
@@ -43,4 +44,4 @@ def choose_model(env: Mapping[str, str]) -> ModelClient:
     if live is None:
         _log.warning("no usable model provider: asking will be refused")
         return NoModel()
-    return live
+    return resilient(live)  # an outage fails fast instead of waiting out every timeout

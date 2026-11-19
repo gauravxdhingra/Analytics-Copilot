@@ -1,6 +1,6 @@
 # Stage V2: Production readiness
 
-Status: **In progress** (2026-11-19). V2-1 done (ADR 0006 proposed, gates implemented). V2-2 done (pacing, mock-tested). **V2-3 is blocked by owner instruction: no calls to the model provider**, so the agent eval cannot be recorded; everything that does not need a live model proceeds. Builds on [V1](V1-vertical-slice.md). Order and scope were fixed by the owner on 2026-11-19 ("build these first"). Depends on ADRs [0001](../adr/0001-vertical-slice-first-iteration.md) to [0005](../adr/0005-memory-and-caching.md) and the new ADR 0006 (first task).
+Status: **In progress** (2026-11-19). V2-1 done (ADR 0006 proposed, gates implemented). V2-2 done (pacing, mock-tested). V2-5 done (clean-clone check passes; first run exposed a slow Keycloak start, now allowed more time). V2-8 and V2-9 partly done. **V2-3 is blocked by owner instruction: no calls to the model provider**, so the agent eval cannot be recorded; everything that does not need a live model proceeds. Builds on [V1](V1-vertical-slice.md). Order and scope were fixed by the owner on 2026-11-19 ("build these first"). Depends on ADRs [0001](../adr/0001-vertical-slice-first-iteration.md) to [0005](../adr/0005-memory-and-caching.md) and the new ADR 0006 (first task).
 
 ## Why this stage exists, and what changed since the V1 plan
 
@@ -68,7 +68,7 @@ Ordered so that tests, evals and baselines come first (principle 8) and nothing 
 
 | # | Item | Spec | Agent | Proof | Depends on |
 |---|---|---|---|---|---|
-| V2-9 | **Kill switches, flags, quotas and circuit breakers.** Switches per capability, tool, model and tenant; per-user and per-tenant quotas and rate limits that persist; circuit breakers and bulkheads per tool server, the Query API and the model provider; everything fails closed | §5.5, §10.2, ARCH §12 | security-reviewer | Tests that each switch refuses with a mapped code and a trace reason; a chaos script (provider down, Query API slow, gateway down) | V2-4 |
+| V2-9 | **[PARTLY DONE: circuit breakers on the model provider and on each tool server, and a cap on questions running at once. STILL OPEN: kill switches and flags, persistent per-user and per-tenant quotas, the chaos script] Kill switches, flags, quotas and circuit breakers.** Switches per capability, tool, model and tenant; per-user and per-tenant quotas and rate limits that persist; circuit breakers and bulkheads per tool server, the Query API and the model provider; everything fails closed | §5.5, §10.2, ARCH §12 | security-reviewer | Tests that each switch refuses with a mapped code and a trace reason; a chaos script (provider down, Query API slow, gateway down) | V2-4 |
 | V2-10 | **Feedback capture and the eval flywheel.** Thumbs and reason codes in the UI and API; a triage store (redacted); a tool that turns a triaged failure into a gold-set candidate and a root-cause tag | §11.4, §6.6 | eval-engineer | End-to-end test: feedback in, candidate case out; no raw content stored | V2-4 |
 
 ### D. Product depth (changes model-facing behaviour, so each runs through the gate)

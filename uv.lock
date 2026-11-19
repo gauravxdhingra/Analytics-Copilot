@@ -26,6 +26,7 @@ members = [
     "copilot-orchestrator",
     "copilot-policy-gateway",
     "copilot-query-api",
+    "copilot-resilience",
     "copilot-schemas",
     "copilot-sql-verifier",
     "copilot-tracing",
@@ -508,6 +509,7 @@ dependencies = [
     { name = "copilot-memory" },
     { name = "copilot-orchestrator" },
     { name = "copilot-policy-gateway" },
+    { name = "copilot-resilience" },
     { name = "copilot-tracing" },
     { name = "fastapi" },
     { name = "httpx" },
@@ -522,6 +524,7 @@ requires-dist = [
     { name = "copilot-memory", editable = "packages/memory" },
     { name = "copilot-orchestrator", editable = "services/orchestrator" },
     { name = "copilot-policy-gateway", editable = "services/policy-gateway" },
+    { name = "copilot-resilience", editable = "packages/resilience" },
     { name = "copilot-tracing", editable = "packages/tracing" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx", specifier = ">=0.27" },
@@ -708,6 +711,7 @@ name = "copilot-models"
 version = "0.1.0"
 source = { editable = "packages/models" }
 dependencies = [
+    { name = "copilot-resilience" },
     { name = "google-genai" },
     { name = "httpx" },
     { name = "pydantic" },
@@ -715,6 +719,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "copilot-resilience", editable = "packages/resilience" },
     { name = "google-genai", specifier = ">=1.0" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "pydantic", specifier = ">=2.7" },
@@ -769,6 +774,7 @@ version = "0.1.0"
 source = { editable = "services/policy-gateway" }
 dependencies = [
     { name = "copilot-auth" },
+    { name = "copilot-resilience" },
     { name = "copilot-schemas" },
     { name = "copilot-tracing" },
     { name = "httpx2" },
@@ -782,6 +788,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "copilot-auth", editable = "packages/auth" },
+    { name = "copilot-resilience", editable = "packages/resilience" },
     { name = "copilot-schemas", editable = "packages/schemas" },
     { name = "copilot-tracing", editable = "packages/tracing" },
     { name = "httpx2" },
@@ -816,6 +823,11 @@ requires-dist = [
     { name = "sqlglot", specifier = ">=25" },
     { name = "uvicorn", specifier = ">=0.30" },
 ]
+
+[[package]]
+name = "copilot-resilience"
+version = "0.1.0"
+source = { editable = "packages/resilience" }
 
 [[package]]
 name = "copilot-schemas"

@@ -41,7 +41,8 @@ services:
       test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080 && printf 'GET /realms/halcyon HTTP/1.0\\r\\n\\r\\n' >&3 && head -n1 <&3 | grep -q '200'"]
       interval: 5s
       timeout: 5s
-      retries: 40
+      retries: 90 # a cold first start (image pull, realm import) is slow on a small VM
+      start_period: 30s
 
   bootstrap:
     # One-shot: seed the synthetic warehouse and create every database role. Uses the owner
