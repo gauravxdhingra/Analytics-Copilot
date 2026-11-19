@@ -11,4 +11,6 @@ RUN npm run build
 FROM nginxinc/nginx-unprivileged:1.29-alpine
 COPY deploy/docker/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /web/dist /usr/share/nginx/html
+# Explicit and checkable: nginx-unprivileged runs as uid 101, never as root.
+USER 101
 EXPOSE 8080
