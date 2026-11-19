@@ -51,7 +51,7 @@ Run from the repo root. Python goes through `uv`; the UI is in `apps/web` (Node 
 | Target | Purpose |
 |---|---|
 | `make up` / `make down` / `make logs` | Whole stack in Docker Compose (UI on :3000). `make up` creates `.env` with random secrets on first run |
-| `make demo` | `make up` with a canned model, so no API key is needed |
+| `make demo` | `make up` for a demo: real model calls if `GROQ_API_KEY` or `GEMINI_API_KEY` is in `.env`, else a canned model |
 | `make lint` / `make typecheck` / `make test` | Quality gates. `typecheck` runs mypy per project plus the UI; `test` runs Python and UI unit tests |
 | `make test-integration` | Needs the stack's Postgres and Keycloak running |
 | `make seed` | Load the synthetic world and provision database roles (host-side) |

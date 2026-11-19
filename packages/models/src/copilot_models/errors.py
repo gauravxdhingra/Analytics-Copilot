@@ -14,7 +14,10 @@ class ModelErrorCode(StrEnum):
 
 
 class ModelError(Exception):
-    def __init__(self, code: ModelErrorCode, detail: str = "") -> None:
+    def __init__(
+        self, code: ModelErrorCode, detail: str = "", *, retry_after: float | None = None
+    ) -> None:
         # `detail` is for non-sensitive identifiers only (for example a request hash).
         super().__init__(f"{code.value}: {detail}" if detail else code.value)
         self.code = code
+        self.retry_after = retry_after  # seconds the provider asked us to wait; never in the text

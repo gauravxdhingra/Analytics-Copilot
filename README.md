@@ -9,13 +9,14 @@ This repository is a vertical slice of the full specification: every layer is re
 Requires Docker, [uv](https://docs.astral.sh/uv/) and Node 24 (only for the tests).
 
 ```bash
-make demo        # builds and starts everything with a canned model (no API key needed)
-# or
-make up          # same stack; set GEMINI_API_KEY in your shell to use a real model
+make demo        # builds and starts everything; real model calls if a key is configured
+make up          # same stack; with no key, asking is refused instead of answered by a stand-in
 make down
 ```
 
 Open <http://localhost:3000>. First run generates random secrets into `deploy/compose/.env` (git-ignored).
+
+**Model.** Put one key in `deploy/compose/.env`: `GROQ_API_KEY` (the default model is the cheapest on Groq, `openai/gpt-oss-20b`) or `GEMINI_API_KEY`. With both set, Groq is used because it is cheaper; set `MODEL_PROVIDER=gemini` to force the other. With no key, `make demo` answers with a canned model that plans one fixed query, so the rest of the product can still be tried. Free tiers have tight per-minute token limits: expect one question to take a few seconds, and wait a moment between questions.
 
 | User | Role | Entities |
 |---|---|---|
@@ -67,7 +68,7 @@ Identity uses one token audience per hop (RFC 8693 token exchange), so a token m
 
 | Real | Stand-in |
 |---|---|
-| OIDC login with PKCE, server-side sessions, CSRF | The language model in `make demo` is canned: it plans one fixed, still-verified query |
+| OIDC login with PKCE, server-side sessions, CSRF | The model is a real one when a key is set; with no key the demo uses a canned model that plans one fixed, still-verified query |
 | Token exchange per hop | The warehouse is a synthetic company, *Halcyon Group* (seeded, deterministic) |
 | Row-level security, per-user roles | Step-up authentication is enforced from token claims; Keycloak is not yet configured to run a second factor |
 | SQL verifier, policy gateway, ledger, maker-checker | Cloud deployment (AWS and Azure) is specified, not built |

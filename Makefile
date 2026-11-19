@@ -61,9 +61,10 @@ down:
 logs:
 	$(COMPOSE) logs -f --tail=100
 
-# A demo that needs no model key: answers use a canned model. Everything else is real.
+# The demo: real model calls when a key is in deploy/compose/.env (GROQ_API_KEY or GEMINI_API_KEY),
+# otherwise a canned model so it still runs. Everything else is real either way.
 demo:
-	COPILOT_MODEL=scripted $(MAKE) up
+	COPILOT_DEMO=1 $(MAKE) up
 	@echo "Sign in as ana.analyst (HAL-DE), ben.analyst (HAL-UK), maria.manager (both) or amit.approver."
 	@echo "Password: DEMO_USER_PASSWORD in deploy/compose/.env"
 

@@ -107,6 +107,13 @@ services:
       JAEGER_URL: http://jaeger:16686
       # Empty by default. `scripted` uses a canned model; with a key, set GEMINI_API_KEY.
       COPILOT_MODEL: ${COPILOT_MODEL:-}
+      COPILOT_DEMO: ${COPILOT_DEMO:-}
+      # Which model answers: MODEL_PROVIDER=groq|gemini, or the cheaper keyed provider if unset.
+      MODEL_PROVIDER: ${MODEL_PROVIDER:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-}
+      GROQ_FALLBACK_MODEL: ${GROQ_FALLBACK_MODEL:-}
+      GROQ_BASE_URL: ${GROQ_BASE_URL:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-}
       GEMINI_FALLBACK_MODEL: ${GEMINI_FALLBACK_MODEL:-}

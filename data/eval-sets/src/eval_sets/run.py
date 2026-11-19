@@ -15,7 +15,7 @@ from copilot_evals.loader import load_gold_set
 from copilot_evals.report import EvalReport
 from copilot_evals.runner import run_agent
 from copilot_models import ModelClient, RecordingClient, ReplayClient
-from copilot_models.adapters.gemini import GeminiClient, GeminiSettings
+from copilot_models.selection import select_live_model
 from query_api.app import create_app
 from query_api.config import Settings
 
@@ -50,10 +50,12 @@ def _model(mode: str, cassette: Path = CASSETTE, command: str = "baseline") -> M
         if not cassette.exists():
             raise SystemExit(
                 f"No recording at {cassette}. Record one with a key: "
-                f"GEMINI_API_KEY=... uv run run-evals {command} --mode record"
+                f"GROQ_API_KEY=... (or GEMINI_API_KEY) uv run run-evals {command} --mode record"
             )
         return ReplayClient(cassette)
-    live = GeminiClient(GeminiSettings.from_env())
+    live = select_live_model(os.environ)
+    if live is None:
+        raise SystemExit("No model key: set GROQ_API_KEY or GEMINI_API_KEY (and MODEL_PROVIDER).")
     if mode == "record":
         cassette.parent.mkdir(parents=True, exist_ok=True)
         return RecordingClient(live, cassette)

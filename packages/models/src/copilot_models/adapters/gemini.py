@@ -42,10 +42,12 @@ class GeminiSettings:
         return self.models.get(role, self.default_model)
 
     @classmethod
-    def from_env(cls) -> "GeminiSettings":
+    def from_env(cls, env: Mapping[str, str] | None = None) -> "GeminiSettings":
+        source = os.environ if env is None else env
+
         # A blank value (an empty line in an .env template) counts as not set.
         def given(name: str) -> str | None:
-            return os.environ.get(name) or None
+            return source.get(name) or None
 
         shared = given("GEMINI_MODEL")
         models = {
@@ -57,7 +59,7 @@ class GeminiSettings:
         # the built-in fallback (an unverified name) would only add a second way to fail.
         fallback = given("GEMINI_FALLBACK_MODEL") or (None if shared else DEFAULT_FALLBACK)
         return cls(
-            api_key=os.environ.get("GEMINI_API_KEY", ""),
+            api_key=source.get("GEMINI_API_KEY", ""),
             models=models,
             default_model=shared or DEFAULT_MODEL,
             fallback_model=fallback,

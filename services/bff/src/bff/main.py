@@ -5,7 +5,6 @@ IdP, the approval service and the trace backend over HTTP. With no model key con
 returns a mapped error and everything else (login, drafts, approvals) still works.
 """
 
-import logging
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -13,7 +12,6 @@ from typing import Any
 
 import httpx
 from copilot_auth import JwksKeyProvider, TokenValidator
-from copilot_models import ModelClient, ModelError, ModelErrorCode, ModelRequest, ModelResponse
 from copilot_tracing import Tracing, configure_tracing
 from fastapi import FastAPI
 from orchestrator import InsightsOrchestrator
@@ -24,15 +22,9 @@ from bff.app import BffDeps, create_app
 from bff.broker import ExchangeBroker
 from bff.config import BffConfig
 from bff.copilot import CopilotApi, OrchestratorCopilot
+from bff.model_choice import choose_model
 from bff.oidc import OidcClient
 from bff.sessions import InMemorySessionStore
-
-
-class _NoModel:
-    """Used when no model key is configured: every call fails with a mapped auth error."""
-
-    async def generate(self, request: ModelRequest) -> ModelResponse:
-        raise ModelError(ModelErrorCode.AUTH)
 
 
 class _Late:
@@ -53,26 +45,6 @@ class _Late:
 
     async def submit_draft(self, *args: Any) -> Any:
         return await self._ready().submit_draft(*args)
-
-
-_log = logging.getLogger("bff")
-
-
-def _scripted_model() -> ModelClient:
-    from bff.scripted import ScriptedModel
-
-    _log.warning("COPILOT_MODEL=scripted: answers use a canned model, not a real one")
-    return ScriptedModel()
-
-
-def _model() -> ModelClient:
-    if os.environ.get("COPILOT_MODEL") == "scripted":
-        return _scripted_model()
-    if os.environ.get("GEMINI_API_KEY"):
-        from copilot_models.adapters.gemini import GeminiClient, GeminiSettings
-
-        return GeminiClient(GeminiSettings.from_env())
-    return _NoModel()
 
 
 def build_app(env: dict[str, str] | None = None) -> FastAPI:
@@ -117,7 +89,7 @@ def build_app(env: dict[str, str] | None = None) -> FastAPI:
         )
         async with local_stack(ledger, tracing=tracing, env=env) as stack:
             orchestrator = InsightsOrchestrator(
-                _model(),
+                choose_model(env),
                 stack.gateway,
                 stack.catalogue,
                 versions={"policy": str(stack.policy.version)},
