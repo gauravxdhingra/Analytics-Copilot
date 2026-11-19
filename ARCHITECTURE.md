@@ -170,6 +170,16 @@ sequenceDiagram
 
 The UI streams a progress event at each stage.
 
+**Worked examples from the V1 build.** Real questions, answered by the running system with a real model and checked against an independent calculation, are in [docs/samples.md](docs/samples.md). Two show the lifecycle above at work:
+
+| Step | "Show me the five largest outflows." (`ana.analyst`) | "And the next 5?" (same conversation) |
+|---|---|---|
+| Route | classified as an insights question | classified as insights, using the earlier question as context |
+| Plan | store `transactions`, order by amount ascending (most negative first), limit 5 | the earlier plan reused with offset 5 |
+| Verify | mandatory filters added, no fan-out, no currency mixing | the same checks, run again |
+| Run | as Ana, so only HAL-DE rows exist for her | cached per user, so a repeat within five minutes skips this step |
+| Answer | five transactions, exact match to the independent ranking | the next five, exact match |
+
 ---
 
 ## 5. Identity and security architecture
@@ -206,6 +216,26 @@ flowchart LR
 - The copilot still applies small-cell suppression and redaction on output as defence in depth.
 - **Fallback if the underlying system cannot enforce row scope for the Query API:** the Analytics server injects scope predicates from the Operations `get_permissions` endpoint and re-verifies the query. This is a documented degradation, not the default.
 - An external policy engine (OPA or Cedar) is a later option if tool policy grows complex. It is not needed now.
+
+**Memory and caching, as built in V1 ([ADR 0005](docs/adr/0005-memory-and-caching.md)).**
+
+```mermaid
+flowchart LR
+  U[User] --> BFF
+  BFF -->|"turns, notes<br/>owner = validated session"| MEM[(Memory<br/>Postgres, forced RLS)]
+  BFF --> ORCH[Orchestrator]
+  MEM -.->|"wrapped, capped, untrusted hints"| ORCH
+  ORCH --> GW[Policy gateway] --> MCP[Analytics tool server]
+  MCP -->|"after auth and verification"| CACHE[Per-user result cache]
+  MCP -->|"miss: as the user"| QA[Query API] --> PG[(Warehouse, RLS)]
+```
+
+- **Short-term and episodic.** The user's question, the *plan* the code produced and a summary written by code (status, row count, as-of date). Never data rows and never model prose. Expires after 24 hours; listable, re-askable and deletable by the user.
+- **Long-term, user-specific.** Short notes the user writes in a visible "What I remember" panel. Validated on the way in (no IBANs, no long digit runs, no markup, at most 300 characters, at most 20 entries). Never written by the model or from a tool result, which closes persistent prompt injection.
+- **Read-back.** Reaches a model only inside `<untrusted source="memory">`, size-capped, closing tags escaped, described as hints for resolving references such as "the next 5". Authorization never depends on it, and if the store is down the question is answered without it.
+- **Isolation.** Every row carries tenant and user. Forced row-level security shows a session only the owner it names; the service role can touch only the memory tables. The owner always comes from the validated session.
+- **Follow-ups.** The query plan has an `offset`, allowed only with an `order_by`. The orchestrator reuses the earlier plan with a new offset, and code verifies it like any other plan.
+- **Result cache.** Inside the analytics tool server, after authentication and verification and before the Query API. Key: tenant, user and a digest of the verified SQL, parameters and flags. Five-minute TTL, bounded per user, errors never cached, and a reused answer says so. Behind a port, so the cloud profile can use Valkey with the same keys.
 
 **Tenancy (D8).** Pooled by default, with a tenant id in every token, key, index namespace, cache key, trace attribute and draft. A silo option (dedicated stack per tenant) is available for regulated tenants. Cross-tenant leakage tests run in CI.
 

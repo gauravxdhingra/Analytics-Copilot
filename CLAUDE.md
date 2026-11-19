@@ -38,6 +38,7 @@ These come from ARCHITECTURE.md §1 and Analytics Copilot.md §3. A change that 
 - Every claim carries `Evidence` with a `Provenance` label.
 - Parameterize all SQL literals. Never interpolate strings into SQL.
 - Errors shown to the model or user are mapped codes, not raw database errors.
+- Memory (turns, notes) is written only from the user's own input and from summaries that code builds, never from tool results or model output. It reaches a model only inside `<untrusted source="memory">` (ADR 0005). Result caches are per user and sit behind authentication and verification.
 - Match the surrounding code's naming, comment density and idiom. Comments explain why, not what.
 
 ## Stack (proposed defaults, confirm in S0 ADRs)

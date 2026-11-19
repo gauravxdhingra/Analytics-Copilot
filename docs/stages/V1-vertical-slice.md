@@ -79,6 +79,20 @@ Order puts checks and baselines before the agent (principle 8). Owners are agent
 
 **V1-17. Close-out.** Update the threat model for the new trust boundaries (`/threat-model`), run `security-reviewer`, `data-correctness-reviewer`, `spec-guardian`, then `/pre-pr`; check the exit table. Depends on: V1-1–V1-16.
 
+### Added after the first close-out
+
+These were not in the original plan. They came from the reviewer agents (V1-17), from first use with a real model, and from the owner's request for memory and caching.
+
+**V1-17. Close-out.** Four reviewer agents attacked the slice; every finding was reproduced and fixed test-first (fan-out through join chains, currency mixing through subqueries and ROLLUP, truncation, untrusted-text labelling, cancellation, draft summaries, unbounded logins). Threat model: `docs/threat-model/v1-vertical-slice.md`.
+
+**V1-18. Second model provider.** A Groq adapter behind the same port, the cheapest chat model by default, one shared rule for choosing a provider, and a demo that makes real model calls when a key is set.
+
+**V1-19. Correct ranking and honest row limits.** Signed amounts rank by magnitude of the outflow; the row-limit note says exactly what happened.
+
+**V1-20 to V1-24. Memory and caching ([ADR 0005](../adr/0005-memory-and-caching.md)).** Per-user conversation memory (24-hour expiry), user-written long-term notes, a history view, a per-user result cache, and follow-ups through a plan offset. Storage in Postgres under forced row-level security; the cache sits behind authentication and verification; memory reaches a model only as a wrapped, capped, untrusted block; nothing is ever written to memory from a tool result or model output.
+
+**Sample questions and answers** from a real run are in [docs/samples.md](../samples.md).
+
 ## Ordering
 
 ```

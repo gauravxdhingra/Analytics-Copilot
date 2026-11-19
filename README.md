@@ -51,6 +51,25 @@ flowchart LR
 
 **One request.** The user signs in at Keycloak. The BFF keeps the tokens server-side; the browser holds only an opaque cookie. A question goes to the orchestrator, which asks the model for a structured query plan. Code verifies the plan against the catalogue and renders parameterised SQL. The query runs through the Query API as that user, so Postgres row-level security decides which rows exist. Code, not the model, does the arithmetic and the date windows. If the model's numbers are not in the result, the answer falls back to a template. Every step is traced and every tool call is ledgered.
 
+**Memory and caching.** The assistant remembers your recent questions for 24 hours (so "and the next 5?" works) and keeps short notes you write yourself in a "What I remember" panel. Both are private to you, stored in Postgres under forced row-level security, and written only from what you type and summaries that code builds, never from tool results or model output. A per-user result cache answers an identical question within five minutes and says so. See [ADR 0005](docs/adr/0005-memory-and-caching.md).
+
+## Sample questions and answers
+
+Real answers from this build with a real model (`openai/gpt-oss-20b` on Groq), each checked against an independent calculation from the seeded data. The full set, including what went wrong, is in [docs/samples.md](docs/samples.md).
+
+| Signed in as | Question | Answer | Checked |
+|---|---|---|---|
+| `ana.analyst` | How many booked transactions are there for each entity I can see? | 776 booked transactions for HAL-DE | exact |
+| `ben.analyst` | the same question | 763 booked transactions for HAL-UK | exact; Ben never sees HAL-DE |
+| `ana.analyst` | What is the total outflow by currency in June 2026? | EUR -7,924,295.19 and USD -97,188.78, never added together | exact |
+| `ana.analyst` | Show me the five largest outflows. | T001104 -1,952,935.66 EUR, T000562 -1,899,392.37 USD, and three more | exact, in order |
+| `ana.analyst` | And the next 5? | the previous plan again with an offset of 5; T000078 -1,621,536.56 USD and four more | exact |
+| `ana.analyst` | the same question twice | second answer says "Reused from your own identical query a moment ago" | n/a |
+| `ana.analyst` | Predict our cash position for next year. | refused: not answerable from governed data | n/a |
+| `ana.analyst` | How much did we pay? | asks which transaction, date range or currency | n/a |
+
+A small model is not perfectly reliable: the June question was answered correctly in three of six attempts, and the others ended safely (an error, an exhausted repair budget, a needless clarifying question). No wrong number was ever shown. That is exactly what the gold-set evaluation is for.
+
 ## Design rules that the code enforces
 
 1. **Read and draft, never execute.** The highest tool tier is `DRAFT`. Approval is a separate service.

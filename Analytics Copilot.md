@@ -781,6 +781,7 @@ Implementation (D7): custom deterministic rails plus small classifiers that run 
   - versioned and attributable in traces.
 - **Memory is untrusted at read time.** It is treated as hints and re-checked against current entitlements and the catalogue.
 - **Organizational knowledge** (synonyms, golden queries) is learned only through steward review, never written automatically from conversations.
+- **As built in V1** ([ADR 0005](docs/adr/0005-memory-and-caching.md)): session memory and the user's history are kept in Postgres for 24 hours under forced row-level security; long-term notes are written only by the user through a visible panel; a per-user result cache sits behind authentication and verification. Sample questions and answers from a real run: [docs/samples.md](docs/samples.md).
 
 ### 10.5 Security
 
