@@ -96,3 +96,26 @@ export interface Span {
   duration_us: number;
   attributes: Record<string, string | number | boolean>;
 }
+
+export interface HistoryTurn {
+  conversation_id: string;
+  question: string;
+  status: string;
+  summary: string;
+  trace_id: string | null;
+  created_at: string;
+}
+
+export interface MemoryItemView {
+  pref_id: string;
+  kind: "preference" | "saved_definition";
+  name: string | null;
+  text: string;
+  created_at: string;
+}
+
+export interface NewMemoryItem {
+  kind: "preference" | "saved_definition";
+  name?: string;
+  text: string;
+}

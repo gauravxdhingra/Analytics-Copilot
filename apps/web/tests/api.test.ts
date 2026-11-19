@@ -1,5 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError, ask, decide, getMe, parseSse } from "../src/lib/api";
+import {
+  ApiError,
+  addMemory,
+  ask,
+  clearHistory,
+  clearMemory,
+  decide,
+  deleteMemory,
+  getHistory,
+  getMe,
+  listMemory,
+  parseSse,
+} from "../src/lib/api";
 import type { AskEvent } from "../src/lib/types";
 
 function sse(...events: Array<[string, unknown]>): Response {
@@ -76,6 +88,73 @@ describe("api", () => {
     await expect(decide("d", "approve")).rejects.toMatchObject({
       code: "STEP_UP_REQUIRED",
       stepUpUrl: "/auth/step-up?return=%2F",
+    });
+  });
+});
+
+describe("memory and history api", () => {
+  beforeEach(() => {
+    document.cookie = "copilot_csrf=tok123";
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    document.cookie = "copilot_csrf=; max-age=0";
+  });
+
+  it("sends the conversation id with a question", async () => {
+    const fetchMock = vi.fn(async () => sse(["done", {}]));
+    vi.stubGlobal("fetch", fetchMock);
+    await ask("And the next 5?", () => {}, undefined, "conv-0001-aaaa");
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({
+      question: "And the next 5?",
+      conversation_id: "conv-0001-aaaa",
+    });
+  });
+
+  it("asks without a conversation id when there is none", async () => {
+    const fetchMock = vi.fn(async () => sse(["done", {}]));
+    vi.stubGlobal("fetch", fetchMock);
+    await ask("q", () => {});
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({ question: "q" });
+  });
+
+  it("lists history and saved memory", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) =>
+        url === "/api/history"
+          ? new Response(JSON.stringify({ turns: [{ question: "q", status: "answered" }] }))
+          : new Response(JSON.stringify({ items: [{ pref_id: "p", text: "t" }] })),
+      ),
+    );
+    expect(await getHistory()).toHaveLength(1);
+    expect(await listMemory()).toHaveLength(1);
+  });
+
+  it("changes memory only with the CSRF token", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ item: { pref_id: "p" } }), { status: 201 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await addMemory({ kind: "preference", text: "Show EUR" });
+    await deleteMemory("00000000-0000-4000-8000-000000000001");
+    await clearMemory();
+    await clearHistory();
+    for (const call of fetchMock.mock.calls as unknown as Array<[string, RequestInit]>) {
+      expect((call[1].headers as Record<string, string>)["X-CSRF-Token"]).toBe("tok123");
+    }
+    expect(fetchMock.mock.calls.map((c) => (c as unknown as [string, RequestInit])[1].method)).toEqual([
+      "POST",
+      "DELETE",
+      "DELETE",
+      "DELETE",
+    ]);
+  });
+
+  it("surfaces a refused memory item as a mapped code", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response('{"error_code":"INVALID_MEMORY"}', { status: 422 })));
+    await expect(addMemory({ kind: "preference", text: "x" })).rejects.toMatchObject({
+      code: "INVALID_MEMORY",
     });
   });
 });

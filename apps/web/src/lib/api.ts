@@ -1,4 +1,6 @@
-import type { AskEvent, Draft, Me, Span } from "./types";
+import type { AskEvent, Draft, HistoryTurn, MemoryItemView, Me, NewMemoryItem, Span } from "./types";
+
+export type { HistoryTurn, MemoryItemView, NewMemoryItem } from "./types";
 
 /** A refusal or failure, as a mapped code. Raw server text never reaches the UI. */
 export class ApiError extends Error {
@@ -71,12 +73,17 @@ export function parseSse(rest: string, chunk: string): { events: AskEvent[]; res
   return { events, rest: tail };
 }
 
-export async function ask(question: string, onEvent: (e: AskEvent) => void, signal?: AbortSignal): Promise<void> {
+export async function ask(
+  question: string,
+  onEvent: (e: AskEvent) => void,
+  signal?: AbortSignal,
+  conversationId?: string,
+): Promise<void> {
   const response = await fetch("/api/ask", {
     method: "POST",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken() },
-    body: JSON.stringify({ question }),
+    body: JSON.stringify(conversationId ? { question, conversation_id: conversationId } : { question }),
     signal,
   });
   if (!response.ok || !response.body) throw await failure(response);
@@ -100,3 +107,18 @@ export const decide = (id: string, decision: "approve" | "reject", comment?: str
   call(`/api/approvals/${id}/decision`, { method: "POST", body: JSON.stringify({ decision, comment }) });
 export const getTrace = async (id: string): Promise<Span[]> =>
   (await call<{ spans: Span[] }>(`/api/traces/${id}`)).spans;
+
+export const getHistory = async (): Promise<HistoryTurn[]> => (await call<{ turns: HistoryTurn[] }>("/api/history")).turns;
+export const clearHistory = async (): Promise<void> => {
+  await call("/api/history", { method: "DELETE" });
+};
+export const listMemory = async (): Promise<MemoryItemView[]> =>
+  (await call<{ items: MemoryItemView[] }>("/api/memory")).items;
+export const addMemory = async (item: NewMemoryItem): Promise<MemoryItemView> =>
+  (await call<{ item: MemoryItemView }>("/api/memory", { method: "POST", body: JSON.stringify(item) })).item;
+export const deleteMemory = async (id: string): Promise<void> => {
+  await call(`/api/memory/${id}`, { method: "DELETE" });
+};
+export const clearMemory = async (): Promise<void> => {
+  await call("/api/memory", { method: "DELETE" });
+};

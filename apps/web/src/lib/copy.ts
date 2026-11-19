@@ -14,6 +14,9 @@ export const ERROR_COPY: Record<string, string> = {
   SOD_VIOLATION: "You cannot approve a draft you made or submitted.",
   NOT_SUBMITTED: "This draft has not been submitted for approval.",
   STEP_UP_REQUIRED: "Stronger, more recent sign-in is required to decide a draft.",
+  INVALID_MEMORY:
+    "That can't be remembered. Memory keeps short, plain notes: no account numbers or IBANs, no markup, at most 300 characters.",
+  MEMORY_LIMIT: "You have reached the limit. Forget something first.",
   ALREADY_DECIDED: "This draft has already been decided.",
 };
 

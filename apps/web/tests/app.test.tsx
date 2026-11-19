@@ -59,7 +59,7 @@ describe("App", () => {
     render(<App />);
     await userEvent.type(await screen.findByRole("textbox", { name: /question/i }), "How many?{enter}");
     expect(await screen.findByText(/12 booked transactions/)).toBeInTheDocument();
-    expect(api.ask).toHaveBeenCalledWith("How many?", expect.any(Function), expect.anything());
+    expect(api.ask).toHaveBeenCalledWith("How many?", expect.any(Function), expect.anything(), expect.stringMatching(/^[A-Za-z0-9_-]{8,64}$/));
   });
 
   it("shows a mapped message when asking fails, and keeps the question usable", async () => {
@@ -77,5 +77,63 @@ describe("App", () => {
     render(<App />);
     await userEvent.type(await screen.findByRole("textbox", { name: /question/i }), "q{enter}");
     expect(await screen.findByRole("link", { name: /sign in/i })).toBeInTheDocument();
+  });
+});
+
+
+describe("conversations", () => {
+  it("keeps one conversation across questions and starts a new one on request", async () => {
+    vi.spyOn(api, "getMe").mockResolvedValue(analyst);
+    const ids: string[] = [];
+    vi.spyOn(api, "ask").mockImplementation(async (_q, onEvent, _signal, conversationId) => {
+      ids.push(conversationId ?? "");
+      onEvent({ event: "answer", data: answered });
+      onEvent({ event: "done", data: {} });
+    });
+    render(<App />);
+    const box = await screen.findByRole("textbox", { name: /question/i });
+    await userEvent.type(box, "first{enter}");
+    await screen.findAllByText(/12 booked transactions/);
+    await userEvent.type(screen.getByRole("textbox", { name: /question/i }), "second{enter}");
+    await waitFor(() => expect(ids).toHaveLength(2));
+    expect(ids[0]).toBe(ids[1]);
+    await userEvent.click(screen.getByRole("button", { name: /new chat/i }));
+    await userEvent.type(screen.getByRole("textbox", { name: /question/i }), "third{enter}");
+    await waitFor(() => expect(ids).toHaveLength(3));
+    expect(ids[2]).not.toBe(ids[0]);
+  });
+
+  it("offers history and saved memory to everyone", async () => {
+    vi.spyOn(api, "getMe").mockResolvedValue(analyst);
+    render(<App />);
+    await screen.findByText("ana.analyst");
+    expect(screen.getByRole("tab", { name: /history/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /what i remember/i })).toBeInTheDocument();
+  });
+
+  it("asking again from history goes back to the chat with the question filled in", async () => {
+    vi.spyOn(api, "getMe").mockResolvedValue(analyst);
+    vi.spyOn(api, "getHistory").mockResolvedValue([
+      { conversation_id: "conv-0001-aaaa", question: "Show the five largest outflows", status: "answered", summary: "s", trace_id: null, created_at: "2026-06-30T10:00:00Z" },
+    ]);
+    render(<App />);
+    await userEvent.click(await screen.findByRole("tab", { name: /history/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /ask again/i }));
+    expect(await screen.findByRole("textbox", { name: /question/i })).toHaveValue("Show the five largest outflows");
+  });
+
+  it("asking the same question again from history fills the box again", async () => {
+    vi.spyOn(api, "getMe").mockResolvedValue(analyst);
+    vi.spyOn(api, "getHistory").mockResolvedValue([
+      { conversation_id: "conv-0001-aaaa", question: "Same question", status: "answered", summary: "s", trace_id: null, created_at: "2026-06-30T10:00:00Z" },
+    ]);
+    render(<App />);
+    for (let round = 0; round < 2; round++) {
+      await userEvent.click(await screen.findByRole("tab", { name: /history/i }));
+      await userEvent.click(await screen.findByRole("button", { name: /ask again/i }));
+      const box = await screen.findByRole("textbox", { name: /question/i });
+      expect(box).toHaveValue("Same question");
+      await userEvent.clear(box);
+    }
   });
 });

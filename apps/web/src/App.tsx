@@ -2,10 +2,12 @@ import { useEffect, useState } from "react";
 import { Approvals } from "./components/Approvals";
 import { Chat } from "./components/Chat";
 import { Drafts } from "./components/Drafts";
+import { HistoryPanel } from "./components/HistoryPanel";
+import { MemoryPanel } from "./components/MemoryPanel";
 import { getMe, logout } from "./lib/api";
 import type { Me } from "./lib/types";
 
-type Tab = "chat" | "drafts" | "approvals";
+type Tab = "chat" | "history" | "memory" | "drafts" | "approvals";
 
 function SignIn() {
   return (
@@ -23,6 +25,7 @@ function SignIn() {
 export function App() {
   const [me, setMe] = useState<Me | null | undefined>(undefined);
   const [tab, setTab] = useState<Tab>("chat");
+  const [draft, setDraft] = useState<{ text: string; at: number } | undefined>(undefined);
   const [unavailable, setUnavailable] = useState(false);
 
   useEffect(() => {
@@ -45,6 +48,8 @@ export function App() {
 
   const tabs: Array<{ id: Tab; label: string }> = [
     { id: "chat", label: "Ask" },
+    { id: "history", label: "History" },
+    { id: "memory", label: "What I remember" },
     { id: "drafts", label: "My drafts" },
     ...(me.roles.includes("approver") ? [{ id: "approvals" as const, label: "Approvals" }] : []),
   ];
@@ -80,7 +85,19 @@ export function App() {
         ))}
       </div>
       <main className="min-h-0 flex-1">
-        {tab === "chat" && <Chat onSignedOut={() => setMe(null)} />}
+        {/* The chat stays mounted so a conversation survives a look at another tab. */}
+        <div hidden={tab !== "chat"} className="h-full">
+          <Chat onSignedOut={() => setMe(null)} draft={draft} />
+        </div>
+        {tab === "history" && (
+          <HistoryPanel
+            onAsk={(question) => {
+              setDraft({ text: question, at: Date.now() });
+              setTab("chat");
+            }}
+          />
+        )}
+        {tab === "memory" && <MemoryPanel />}
         {tab === "drafts" && <Drafts />}
         {tab === "approvals" && <Approvals />}
       </main>

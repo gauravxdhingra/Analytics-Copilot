@@ -7,12 +7,20 @@ import { HowDrawer } from "./HowDrawer";
 
 type Turn = { id: number; question: string; answer?: Answer; error?: string; steps: string[]; pending: boolean };
 
-export function Chat({ onSignedOut }: { onSignedOut: () => void }) {
+function newConversationId(): string {
+  return globalThis.crypto?.randomUUID?.() ?? `c-${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+}
+
+export function Chat({ onSignedOut, draft }: { onSignedOut: () => void; draft?: { text: string; at: number } }) {
+  const [conversationId, setConversationId] = useState(newConversationId);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState<Answer | null>(null);
   const next = useRef(1);
+  useEffect(() => {
+    if (draft) setText(draft.text);
+  }, [draft]);
   const controller = useRef(new AbortController());
   // Leaving the page stops the stream, and with it the spend on the user's behalf.
   useEffect(() => () => controller.current.abort(), []);
@@ -37,6 +45,7 @@ export function Chat({ onSignedOut }: { onSignedOut: () => void }) {
           else if (event.event === "error") patch(id, { error: errorCopy(event.data.error_code) });
         },
         controller.current.signal,
+        conversationId,
       );
     } catch (error) {
       if (error instanceof ApiError && error.code === "UNAUTHENTICATED") return onSignedOut();
@@ -69,6 +78,19 @@ export function Chat({ onSignedOut }: { onSignedOut: () => void }) {
             )}
           </article>
         ))}
+      </div>
+      <div className="flex justify-end pb-1">
+        <button
+          type="button"
+          onClick={() => {
+            setTurns([]);
+            setOpen(null);
+            setConversationId(newConversationId());
+          }}
+          className="text-xs text-slate-500 hover:underline"
+        >
+          New chat
+        </button>
       </div>
       <form
         className="flex gap-2 border-t border-slate-200 pt-3"
