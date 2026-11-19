@@ -197,7 +197,7 @@ async def test_list_and_describe_stores_come_from_the_schema_endpoint(
     assert {"transaction_id", "amount"} <= {c["name"] for c in described["columns"]}
     assert any("is_current" in f for f in described["required_filters"])
     assert any("cancelled" in issue for issue in described["known_issues"])
-    assert any("ssis (one_to_many)" in r for r in described["relationships"])
+    assert any("ssis (many_to_many)" in r for r in described["relationships"])
     assert described["catalogue_version"].startswith("sha256:")
 
 

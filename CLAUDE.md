@@ -42,7 +42,7 @@ These come from ARCHITECTURE.md §1 and Analytics Copilot.md §3. A change that 
 
 ## Stack (proposed defaults, confirm in S0 ADRs)
 
-Python 3.12 managed with `uv`; Pydantic v2; LangGraph; FastAPI; sqlglot; OR-Tools; pytest + hypothesis + DeepEval; `ruff` (lint + format); `mypy --strict`. TypeScript/React for the admin console, web component for the widget. Terraform for AWS (primary) and Azure. Docker Compose for the laptop profile. Repository layout: ARCHITECTURE.md §14.
+Python 3.12 managed with `uv`; Pydantic v2; LangGraph; FastAPI; sqlglot; OR-Tools; pytest + hypothesis + DeepEval; `ruff` (lint + format); `mypy --strict`. TypeScript/React and Vite for the chat UI (`apps/web`); an admin console and an embeddable widget are specified but not built. Terraform for AWS (primary) and Azure. Docker Compose for the laptop profile. Repository layout: ARCHITECTURE.md §14.
 
 ## Commands
 

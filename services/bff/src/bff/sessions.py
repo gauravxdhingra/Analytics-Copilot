@@ -59,10 +59,12 @@ class InMemorySessionStore:
         absolute_seconds: int,
         login_ttl_seconds: int,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+        max_pending: int = 10_000,
     ) -> None:
         self._idle = idle_seconds
         self._absolute = absolute_seconds
         self._login_ttl = login_ttl_seconds
+        self._max_pending = max_pending
         self._clock = clock
         self._sessions: dict[str, Session] = {}
         self._pending: dict[str, PendingLogin] = {}
@@ -88,7 +90,18 @@ class InMemorySessionStore:
     def delete(self, session_id: str) -> None:
         self._sessions.pop(session_id, None)
 
+    @property
+    def pending_count(self) -> int:
+        return len(self._pending)
+
     def add_pending(self, pending: PendingLogin) -> None:
+        # /auth/login is open to anyone, so unfinished logins must not accumulate: drop the
+        # expired ones, and if a flood is still in progress, the oldest first.
+        now = self._now()
+        for state in [s for s, p in self._pending.items() if now - p.created_at > self._login_ttl]:
+            del self._pending[state]
+        while len(self._pending) >= self._max_pending:
+            del self._pending[next(iter(self._pending))]  # dicts keep insertion order
         self._pending[pending.state] = pending
 
     def take_pending(self, state: str) -> PendingLogin | None:

@@ -11,12 +11,12 @@ from typing import Any, Literal
 from copilot_catalogue import Catalogue, Store
 from pydantic import BaseModel, ConfigDict, Field
 
+from copilot_sql_verifier.joins import INVERSE, repeats_rows
 from copilot_sql_verifier.verifier import VerifyOptions
 
 _IDENT = r"^[a-z_][a-z0-9_]*$"
 _AGGREGATES = {"sum": "SUM", "avg": "AVG", "min": "MIN", "max": "MAX", "count": "COUNT"}
 _MONEY_AGGS = {"sum", "avg", "min", "max"}
-_FLIP = {"one_to_many": "many_to_one", "many_to_one": "one_to_many", "one_to_one": "one_to_one"}
 
 
 class PlanError(Exception):
@@ -102,7 +102,7 @@ class _Render:
             on = " AND ".join(f"{source_alias}.{a} = {target.table}.{b}" for a, b in found.join_on)
             self.join_sql.append(f"JOIN {target.store} AS {target.table} ON {on}")
             self.joins.append((source_alias, target.table, found.cardinality))
-            self.joins.append((target.table, source_alias, _FLIP[found.cardinality]))
+            self.joins.append((target.table, source_alias, INVERSE[found.cardinality]))
 
     def column(self, reference: str) -> tuple[str, str, Store]:
         """Validate `alias.column` and return (alias, column, store)."""
@@ -130,6 +130,18 @@ class _Render:
         for item in self.plan.select:
             alias, name, store = self.column(item.column)
             ref = f"{alias}.{name}"
+            definition = store.column(name)
+            if (
+                definition is not None
+                and definition.untrusted
+                and (
+                    (item.agg is None and item.alias)
+                    or item.agg not in (None, "count", "count_distinct")
+                )
+            ):
+                # The gateway wraps and taints untrusted text by output column name. A rename or
+                # an aggregate (max, min) would carry the text out under another name, unlabelled.
+                raise PlanError("UNTRUSTED_COLUMN", f"{ref} must be selected as is")
             if item.agg is None:
                 expressions.append(f"{ref} AS {item.alias}" if item.alias else ref)
                 plain.append(ref)
@@ -156,7 +168,7 @@ class _Render:
         return expressions, (plain if aggregates else [])
 
     def _fans_out(self, alias: str) -> bool:
-        return any(a == alias and c == "one_to_many" for a, _b, c in self.joins)
+        return repeats_rows(alias, self.joins)
 
     def _pinned(self, alias: str, columns: list[str]) -> bool:
         for f in self.plan.filters:
@@ -224,7 +236,8 @@ def render(plan: QueryPlan, catalogue: Catalogue) -> RenderedQuery:
         parts.append("GROUP BY " + ", ".join(dict.fromkeys(group)))
     if order:
         parts.append("ORDER BY " + ", ".join(order))
-    parts.append(f"LIMIT {plan.limit}")
+    # One past the cap: the Query API fetches cap + 1 to learn whether the result was cut short.
+    parts.append(f"LIMIT {plan.limit + 1}")
     options = VerifyOptions(
         history_requested=plan.include_history, include_cancelled=plan.include_cancelled
     )

@@ -3,6 +3,7 @@
 Never overwrites an existing .env, so running it twice is safe. The file is git-ignored.
 """
 
+import os
 import secrets
 import sys
 from pathlib import Path
@@ -23,8 +24,10 @@ def main() -> int:
             value = secrets.token_urlsafe(24) if "change-me" in value else value
             line = f"{key}={value}"
         lines.append(line)
-    TARGET.write_text("\n".join(lines) + "\n")
-    TARGET.chmod(0o600)  # owner-only
+    # Created owner-only from the first byte: no window where the secrets are world-readable.
+    fd = os.open(TARGET, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w") as handle:
+        handle.write("\n".join(lines) + "\n")
     sys.stdout.write(f"wrote {TARGET} with random secrets (mode 600).\n")
     return 0
 

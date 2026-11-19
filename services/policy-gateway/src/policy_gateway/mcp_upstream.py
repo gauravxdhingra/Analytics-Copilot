@@ -5,6 +5,7 @@ UpstreamError codes: the gateway then denies the call (fail closed) and never de
 unguarded path.
 """
 
+import asyncio
 import re
 from collections.abc import Callable
 from typing import Any, cast
@@ -27,6 +28,13 @@ def _leaves(exc: BaseException) -> list[BaseException]:
 
 
 def _classify(exc: BaseException) -> UpstreamError:
+    # Cancellation is not a tool failure. A timeout or a client that went away must reach the
+    # caller as cancellation, or a run looks "unavailable" while a write may already have landed.
+    if any(
+        isinstance(leaf, asyncio.CancelledError | KeyboardInterrupt | SystemExit)
+        for leaf in _leaves(exc)
+    ):
+        raise exc
     for leaf in _leaves(exc):
         if isinstance(leaf, httpx2.TimeoutException | TimeoutError):
             return UpstreamError("UPSTREAM_TIMEOUT")

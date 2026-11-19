@@ -5,7 +5,7 @@
 **/.env
 **/.env.*
 !**/.env.example
-.venv
+**/.venv
 **/node_modules
 **/dist
 **/__pycache__
@@ -17,3 +17,7 @@ reports
 test-results
 playwright-report
 *.md
+*.pem
+*.key
+docs
+.github

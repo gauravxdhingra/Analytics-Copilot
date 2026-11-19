@@ -61,14 +61,17 @@ def test_sensitive_and_untrusted_columns_are_marked(catalogue: Catalogue) -> Non
     assert iban is not None and iban.sensitivity == "restricted"
     assert beneficiary is not None and beneficiary.sensitivity == "restricted"
     assert remittance is not None and remittance.untrusted
-    assert catalogue.untrusted_columns() == {"remittance_text"}
+    # Every column filled by an outside party. `name` is matched by column name, so the internal
+    # entities.name is wrapped too: over-labelling is the safe direction.
+    assert catalogue.untrusted_columns() == {"remittance_text", "reference", "name"}
 
 
 def test_relationships_are_declared_with_cardinality(catalogue: Catalogue) -> None:
     transactions = catalogue.store("treasury.transactions")
     by_target = {r.to: r for r in transactions.relationships}
     assert by_target["treasury.counterparties"].cardinality == "many_to_one"
-    assert by_target["treasury.ssis"].cardinality == "one_to_many"  # the fan-out trap
+    # Both sides repeat: instructions hang off the counterparty, not the transaction.
+    assert by_target["treasury.ssis"].cardinality == "many_to_many"  # the fan-out trap
     assert catalogue.relationship("treasury.payments", "treasury.transactions") is not None
 
 

@@ -10,11 +10,13 @@ from dataclasses import dataclass
 from typing import Any
 
 import sqlglot
-from copilot_catalogue import Catalogue, Store
+from copilot_catalogue import Catalogue, MoneyField, Store
 from pydantic import BaseModel
 from sqlglot import exp
 from sqlglot.errors import SqlglotError
 from sqlglot.optimizer.scope import Scope, traverse_scope
+
+from copilot_sql_verifier.joins import INVERSE, repeats_rows
 
 _AGGREGATES = (exp.Sum, exp.Avg, exp.Min, exp.Max)
 _FORBIDDEN = (
@@ -66,6 +68,15 @@ class _Ref:
     alias: str
     store: Store
     column: str
+
+
+def _has_subtotals(group: exp.Expr | None) -> bool:
+    """ROLLUP, CUBE and GROUPING SETS add rows that total across the grouped column."""
+    if group is None:
+        return False
+    return any(
+        isinstance(item, exp.Rollup | exp.Cube | exp.GroupingSets) for item in group.expressions
+    )
 
 
 def _flatten_and(node: exp.Expr | None) -> list[exp.Expr]:
@@ -350,15 +361,10 @@ class _ScopeCheck:
                     cardinality = (
                         relationship.cardinality
                         if source_alias == prior
-                        else {"one_to_many": "many_to_one", "many_to_one": "one_to_many"}.get(
-                            relationship.cardinality, relationship.cardinality
-                        )
+                        else INVERSE[relationship.cardinality]
                     )
                     self.joined.append((prior, alias, cardinality))
-                    inverse = {"one_to_many": "many_to_one", "many_to_one": "one_to_many"}.get(
-                        cardinality, cardinality
-                    )
-                    self.joined.append((alias, prior, inverse))
+                    self.joined.append((alias, prior, INVERSE[cardinality]))
                     return True
         return False
 
@@ -440,18 +446,73 @@ class _ScopeCheck:
                     return True
         return False
 
+    def _money_origin(self, scope: Scope, column: exp.Column) -> MoneyField | None:
+        """The catalogue money field a column ultimately reads, looking through subqueries and
+        CTEs. A total built from such a column is still money, whatever it is called."""
+        stores: dict[str, Store] = {}
+        derived: dict[str, Scope] = {}
+        for alias, source in scope.sources.items():
+            if isinstance(source, exp.Table):
+                key = f"{source.db}.{source.name}".lower() if source.db else source.name.lower()
+                if key in self.run.catalogue.stores:
+                    stores[alias] = self.run.catalogue.stores[key]
+            elif isinstance(source, Scope):
+                derived[alias] = source
+        if column.table in stores:
+            return stores[column.table].money_field(column.name)
+        if not column.table:
+            for store in stores.values():
+                if store.column(column.name):
+                    return store.money_field(column.name)
+            if len(derived) == 1:
+                source_scope = next(iter(derived.values()))
+            else:
+                return None
+        else:
+            source_scope = derived.get(column.table)  # type: ignore[assignment]
+        inner = source_scope.expression if source_scope else None
+        if source_scope is None or not isinstance(inner, exp.Select):
+            return None
+        for item in inner.selects:
+            if item.alias_or_name.lower() != column.name.lower():
+                continue
+            for read in item.find_all(exp.Column):
+                found = self._money_origin(source_scope, read)
+                if found:
+                    return found
+        return None
+
+    def _outer_keeps_currency(self, column: exp.Column, money: MoneyField) -> bool:
+        group = self.select.args.get("group")
+        if group is None or _has_subtotals(group):
+            return False
+        wanted = {money.currency_column, *money.pinned_by}
+        return any(
+            g.name in wanted and (not column.table or g.table == column.table)
+            for item in group.expressions
+            for g in item.find_all(exp.Column)
+        )
+
     def _check_aggregates(self) -> None:
         groups = self._group_columns()
+        group_node = self.select.args.get("group")
+        subtotals = _has_subtotals(group_node)
         for node in self._own_aggregates():
             columns = [c for c in node.find_all(exp.Column)]
             is_distinct_count = isinstance(node, exp.Count) and isinstance(node.this, exp.Distinct)
             for column in columns:
                 ref = self.resolve(column)
                 if ref is None:
+                    if not isinstance(node, exp.Count):
+                        origin = self._money_origin(self.scope, column)
+                        if origin and not self._outer_keeps_currency(column, origin):
+                            self.run.fail(
+                                "CURRENCY_MIX",
+                                f"{column.sql()} is money from several currencies; the outer query "
+                                f"must keep {origin.currency_column} (group by it) to add it up.",
+                            )
                     continue
-                if not is_distinct_count and any(
-                    a == ref.alias and c == "one_to_many" for a, _b, c in self.joined
-                ):
+                if not is_distinct_count and repeats_rows(ref.alias, self.joined):
                     self.run.fail(
                         "FAN_OUT",
                         f"Aggregating {ref.store.store}.{ref.column} after a join to a one-to-many "
@@ -462,10 +523,11 @@ class _ScopeCheck:
                     continue
                 window = node.find_ancestor(exp.Window)
                 split = {c for a, c in self._partition_or_group(window, groups) if a == ref.alias}
-                if (
-                    money.currency_column in split
-                    or any(p in split for p in money.pinned_by)
-                    or self._pinned(ref.alias, [money.currency_column, *money.pinned_by])
+                pinned = self._pinned(ref.alias, [money.currency_column, *money.pinned_by])
+                # ROLLUP, CUBE and GROUPING SETS add a total row that spans every currency.
+                if pinned or (
+                    not (subtotals and window is None)
+                    and (money.currency_column in split or any(p in split for p in money.pinned_by))
                 ):
                     continue
                 self.run.fail(

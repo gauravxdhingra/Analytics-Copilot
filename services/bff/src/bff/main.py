@@ -59,18 +59,10 @@ _log = logging.getLogger("bff")
 
 
 def _scripted_model() -> ModelClient:
-    """A canned model for demos and browser tests: it plans one fixed, still-verified query.
-
-    The numbers and rows still come from the real stack, as the signed-in user; only the
-    language model is replaced. Never selected unless COPILOT_MODEL=scripted is set.
-    """
-    from copilot_models import FakeClient
-    from orchestrator.testing import COUNT_PLAN, narrate, plan, route
+    from bff.scripted import ScriptedModel
 
     _log.warning("COPILOT_MODEL=scripted: answers use a canned model, not a real one")
-    return FakeClient(
-        [route(), plan(COUNT_PLAN), narrate("There are some booked transactions.")] * 500
-    )
+    return ScriptedModel()
 
 
 def _model() -> ModelClient:

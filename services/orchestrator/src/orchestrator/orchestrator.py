@@ -478,6 +478,15 @@ class InsightsOrchestrator:
             caveats.append(f"Data as of {table.as_of}.")
         if table.truncated:
             caveats.append(f"The result was truncated at {table.row_count} rows.")
+        # By default only current, booked rows count. If the plan waived either rule, the numbers
+        # mean something else, and the reader has to be told rather than left to assume.
+        plan = state.plan
+        if plan is not None and plan.include_history:
+            caveats.append(
+                "Includes superseded versions of restated transactions, so rows may repeat."
+            )
+        if plan is not None and plan.include_cancelled:
+            caveats.append("Includes cancelled transactions.")
         caveats += [str(w) for w in out.get("warnings", [])]
         return {"table": table, "caveats": caveats, "steps": [*state.steps, "analyse"]}
 
@@ -524,6 +533,20 @@ class InsightsOrchestrator:
         "Confirm supporting documents before any further action.",
     )
 
+    @staticmethod
+    def _draft_summary(state: _State, ctx: RunContext) -> str:
+        """The model's own wording, unless it has read outside text: then a template, because
+        anything it writes after that may have been steered, and a person will act on it."""
+        if not ctx.state.tainted_values:
+            return state.text or ""
+        rows = state.table.row_count if state.table else 0
+        as_of = f", data as of {state.table.as_of}" if state.table and state.table.as_of else ""
+        return (
+            f"Prepared by the copilot from a verified query ({rows} row(s){as_of}). "
+            "Some of the data is free text from outside the company and is not repeated here; "
+            "review the evidence."
+        )
+
     def _draft_entity(self, state: _State, ctx: RunContext) -> str | None:
         """The entity a draft is for: the single one in the data, else the user's only entity."""
         table = state.table
@@ -536,8 +559,9 @@ class InsightsOrchestrator:
         return entities[0] if len(entities) == 1 else None
 
     async def _draft(self, state: _State, ctx: RunContext) -> dict[str, Any]:
-        """Create a draft for a person to review. Code builds it from the verified result; nothing
-        from untrusted cells is copied in, and the gateway still guards the arguments."""
+        """Create a draft for a person to review. Code builds it from the verified result. After the
+        run has read untrusted cells even the summary is a code template, and the gateway still
+        guards the arguments."""
         steps = [*state.steps, "draft"]
         entity = self._draft_entity(state, ctx)
         if entity is None:
@@ -549,7 +573,7 @@ class InsightsOrchestrator:
         ]
         args = {
             "title": f"Review: {state.question}"[:200],
-            "summary": (state.text or "")[:2000],
+            "summary": self._draft_summary(state, ctx)[:2000],
             "entity_id": entity,
             "recommended_actions": list(self._ACTIONS),
             "evidence": evidence,

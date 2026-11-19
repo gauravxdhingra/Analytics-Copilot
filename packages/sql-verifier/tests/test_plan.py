@@ -126,7 +126,9 @@ def test_a_limit_is_bounded_and_structural() -> None:
         _plan(limit=0)
     with pytest.raises(ValueError, match="limit"):
         _plan(limit=5001)
-    assert render(_plan(limit=5000), CATALOGUE).sql.endswith("LIMIT 5000")
+    # One more than the cap, so the Query API can tell "exactly the cap" from "cut short".
+    assert render(_plan(limit=5000), CATALOGUE).sql.endswith("LIMIT 5001")
+    assert render(_plan(limit=10), CATALOGUE).sql.endswith("LIMIT 11")
 
 
 def test_the_same_plan_always_renders_the_same_sql() -> None:
@@ -217,3 +219,48 @@ def test_a_rendered_plan_either_is_refused_by_the_planner_or_passes_the_verifier
         raise AssertionError(
             f"rendered SQL failed verification: {query.sql} {exc.violations}"
         ) from exc
+
+
+def test_aggregating_through_a_chain_that_ends_in_a_one_to_many_join_is_refused() -> None:
+    plan = _plan(
+        select=[{"column": "transactions.amount", "agg": "sum"}],
+        joins=["transactions.counterparty", "counterparties.ssis"],
+    )
+    with pytest.raises(PlanError) as info:
+        render(plan, CATALOGUE)
+    assert info.value.code == "FAN_OUT"
+
+
+def test_a_many_to_one_chain_may_be_aggregated() -> None:
+    plan = _plan(
+        select=[{"column": "transactions.amount", "agg": "sum"}],
+        joins=["transactions.counterparty"],
+    )
+    assert "JOIN" in render(plan, CATALOGUE).sql
+
+
+@pytest.mark.parametrize(
+    "item",
+    [
+        {
+            "column": "transactions.remittance_text",
+            "alias": "memo",
+        },  # a renamed column escapes the label
+        {"column": "transactions.remittance_text", "agg": "max"},  # an aggregate renames it too
+        {"column": "transactions.remittance_text", "agg": "min"},
+    ],
+)
+def test_untrusted_text_cannot_be_renamed_or_aggregated(item: dict[str, str]) -> None:
+    # The label that makes the gateway wrap and taint a cell is matched by column name.
+    with pytest.raises(PlanError) as info:
+        render(_plan(select=[{"column": "transactions.transaction_id"}, item]), CATALOGUE)
+    assert info.value.code == "UNTRUSTED_COLUMN"
+
+
+def test_untrusted_text_may_be_selected_plainly_or_counted() -> None:
+    plain = _plan(select=[{"column": "transactions.remittance_text"}])
+    assert "remittance_text" in render(plain, CATALOGUE).sql
+    counted = _plan(
+        select=[{"column": "transactions.remittance_text", "agg": "count", "alias": "n"}]
+    )
+    assert "COUNT(" in render(counted, CATALOGUE).sql

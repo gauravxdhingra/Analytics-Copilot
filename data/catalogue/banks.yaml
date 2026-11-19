@@ -4,7 +4,7 @@ owner: { business: treasury-ops, steward: data-platform }
 grain: [bank_id]
 columns:
   - { name: bank_id, type: text }
-  - { name: name, type: text }
+  - { name: name, type: text, description: "Bank name as published", untrusted: true }
   - { name: bic, type: text }
 relationships: []
 known_issues: []

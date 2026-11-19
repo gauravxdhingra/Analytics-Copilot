@@ -22,6 +22,12 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
       - run: uv sync --frozen --python 3.12
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: make web-install
       - run: make lint
       - run: make typecheck
       - run: make test
@@ -30,6 +36,8 @@ jobs:
         run: |
           uv export --frozen --no-emit-workspace --format requirements-txt -o "$RUNNER_TEMP/req.txt"
           uvx pip-audit --requirement "$RUNNER_TEMP/req.txt" --disable-pip --no-deps
+      - name: UI dependency audit
+        run: cd apps/web && npm audit --audit-level=high
 
   secrets:
     runs-on: ubuntu-latest

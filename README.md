@@ -93,7 +93,7 @@ apps/web/             React UI and browser tests
 services/             bff, orchestrator, policy-gateway, query-api, approval
 mcp-servers/          analytics and drafts tool servers
 packages/             auth, models (ports and adapters), catalogue, sql-verifier,
-                      tracing, drafts, schemas, evals
+                      tracing, drafts, schemas, evals, mcp-common, devtools
 data/                 synthetic world generator, eval sets, semantic catalogue
 deploy/               compose stack, container images, Keycloak realm
 docs/adr/             decision records

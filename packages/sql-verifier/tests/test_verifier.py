@@ -257,3 +257,72 @@ def test_a_pass_reports_what_was_not_checked(verifier: Verifier) -> None:
     assert (
         "semantic" in text and "cost" in text
     )  # the LLM check and the cost guard are not part of this layer
+
+
+def test_a_fan_out_two_joins_away_is_still_a_fan_out(verifier: Verifier) -> None:
+    # transactions -> counterparties is many-to-one, so the repeat is introduced one hop later:
+    # each transaction appears once per settlement instruction of its counterparty.
+    sql = (
+        f"SELECT sum(t.amount) FROM {T} t JOIN treasury.counterparties c USING (counterparty_id) "
+        "JOIN treasury.ssis s ON s.counterparty_id = c.counterparty_id "
+        "WHERE t.is_current AND t.status = $1 AND t.account_id = $2"
+    )
+    assert codes(verifier, sql, ["booked", "A-DE-EUR-1"]) == {"FAN_OUT"}
+
+
+def test_a_chain_of_many_to_one_joins_is_not_a_fan_out(verifier: Verifier) -> None:
+    sql = (
+        f"SELECT sum(t.amount) FROM {T} t JOIN treasury.counterparties c USING (counterparty_id) "
+        "WHERE t.is_current AND t.status = $1 AND t.account_id = $2"
+    )
+    assert codes(verifier, sql, ["booked", "A-DE-EUR-1"]) == set()
+
+
+def test_counting_a_row_that_every_transaction_repeats_is_a_fan_out(verifier: Verifier) -> None:
+    # Settlement instructions hang off the counterparty, so joining transactions to them repeats
+    # each instruction once per transaction: the relationship is many-to-many, not one-to-many.
+    sql = (
+        f"SELECT count(s.ssi_id) FROM treasury.ssis s JOIN {T} t "
+        "ON t.counterparty_id = s.counterparty_id WHERE t.is_current AND t.status = $1"
+    )
+    assert codes(verifier, sql, ["booked"]) == {"FAN_OUT"}
+
+
+_PER_CURRENCY = (
+    f"SELECT t.currency, sum(t.amount) AS total FROM {T} t "
+    "WHERE t.is_current AND t.status = $1 GROUP BY t.currency"
+)
+
+
+def test_adding_up_per_currency_totals_in_an_outer_query_is_a_currency_mix(
+    verifier: Verifier,
+) -> None:
+    # Each inner row is one currency, so the inner query is fine. Summing those rows is not.
+    sql = f"SELECT sum(x.total) FROM ({_PER_CURRENCY}) x"
+    assert codes(verifier, sql, ["booked"]) == {"CURRENCY_MIX"}
+
+
+def test_the_same_mistake_through_a_cte_is_a_currency_mix(verifier: Verifier) -> None:
+    sql = f"WITH x AS ({_PER_CURRENCY}) SELECT sum(x.total) FROM x"
+    assert codes(verifier, sql, ["booked"]) == {"CURRENCY_MIX"}
+
+
+def test_an_outer_query_that_keeps_the_currency_is_fine(verifier: Verifier) -> None:
+    sql = f"SELECT x.currency, sum(x.total) FROM ({_PER_CURRENCY}) x GROUP BY x.currency"
+    assert codes(verifier, sql, ["booked"]) == set()
+
+
+def test_a_rollup_total_row_across_currencies_is_a_currency_mix(verifier: Verifier) -> None:
+    sql = (
+        f"SELECT t.currency, sum(t.amount) FROM {T} t WHERE t.is_current AND t.status = $1 "
+        "GROUP BY ROLLUP (t.currency)"
+    )
+    assert codes(verifier, sql, ["booked"]) == {"CURRENCY_MIX"}
+
+
+def test_cube_and_grouping_sets_are_refused_for_the_same_reason(verifier: Verifier) -> None:
+    base = f"SELECT t.currency, sum(t.amount) FROM {T} t WHERE t.is_current AND t.status = $1 "
+    assert codes(verifier, base + "GROUP BY CUBE (t.currency)", ["booked"]) == {"CURRENCY_MIX"}
+    assert codes(verifier, base + "GROUP BY GROUPING SETS ((t.currency), ())", ["booked"]) == {
+        "CURRENCY_MIX"
+    }

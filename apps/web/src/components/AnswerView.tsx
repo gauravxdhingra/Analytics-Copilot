@@ -1,7 +1,17 @@
 import type { Answer } from "../lib/types";
+import { unwrapUntrusted } from "../lib/untrusted";
 import { EvidenceChips } from "./EvidenceChips";
 
-const format = (value: unknown): string => (value === null || value === undefined ? "" : String(value));
+/** Outside text is shown as plain text and marked, so it is never mistaken for the company's own. */
+function Cell({ value }: { value: unknown }) {
+  const { text, external } = unwrapUntrusted(value);
+  if (!external) return <>{text}</>;
+  return (
+    <span aria-label="External text" title="Text from outside the company; treated as data" className="italic text-slate-600">
+      {text}
+    </span>
+  );
+}
 
 export function AnswerView({ answer, onHow }: { answer: Answer; onHow: () => void }) {
   if (answer.status === "refused" || answer.status === "failed") {
@@ -36,7 +46,7 @@ export function AnswerView({ answer, onHow }: { answer: Answer; onHow: () => voi
                 <tr key={i} className="border-b border-slate-100">
                   {row.map((cell, j) => (
                     <td key={j} className="px-2 py-1 tabular-nums">
-                      {format(cell)}
+                      <Cell value={cell} />
                     </td>
                   ))}
                 </tr>

@@ -8,6 +8,7 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 import pytest
 from bff.config import BffConfig
+from bff.sessions import InMemorySessionStore, PendingLogin
 from bff.testing import (
     CLIENT_SECRET,
     DRAFT,
@@ -529,3 +530,38 @@ async def test_a_refused_login_logs_why_without_logging_secrets(
     text = " ".join(r.getMessage() for r in caplog.records)
     assert reason in text
     assert code not in text and query["state"][0] not in text and "forged" not in text
+
+
+def _store(clock: Clock, max_pending: int) -> InMemorySessionStore:
+    return InMemorySessionStore(
+        idle_seconds=1800,
+        absolute_seconds=28_800,
+        login_ttl_seconds=600,
+        clock=clock.now,
+        max_pending=max_pending,
+    )
+
+
+def _pending(state: str, clock: Clock) -> PendingLogin:
+    return PendingLogin(
+        state=state, nonce="n", verifier="v", return_to="/", created_at=clock.now().timestamp()
+    )
+
+
+def test_unfinished_logins_cannot_grow_memory_without_bound(clock: Clock) -> None:
+    # /auth/login is open to anyone, so an attacker can start logins forever.
+    store = _store(clock, max_pending=3)
+    for i in range(10):
+        store.add_pending(_pending(f"s{i}", clock))
+    assert store.pending_count == 3
+    assert store.take_pending("s0") is None  # the oldest were dropped
+    assert store.take_pending("s9") is not None  # a real user's login still works
+
+
+def test_expired_logins_are_swept_when_new_ones_arrive(clock: Clock) -> None:
+    store = _store(clock, max_pending=1000)
+    for i in range(5):
+        store.add_pending(_pending(f"old{i}", clock))
+    clock.advance(601)
+    store.add_pending(_pending("new", clock))
+    assert store.pending_count == 1

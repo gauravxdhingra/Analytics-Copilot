@@ -37,6 +37,21 @@ describe("AnswerView", () => {
     expect(screen.queryByRole("button", { name: /how i got this/i })).toBeNull();
   });
 
+  it("shows outside text without the wrapper tags, marked as external", () => {
+    const wrapped = {
+      ...answered,
+      table: {
+        ...answered.table!,
+        columns: ["counterparty"],
+        rows: [['<untrusted source="analytics.run_validated_select:name">Acme GmbH</untrusted>']],
+      },
+    };
+    render(<AnswerView answer={wrapped} onHow={() => {}} />);
+    expect(screen.getByText("Acme GmbH")).toBeInTheDocument();
+    expect(screen.queryByText(/<untrusted/)).toBeNull();
+    expect(screen.getByLabelText(/external text/i)).toBeInTheDocument();
+  });
+
   it("renders model text as text, never as HTML", () => {
     const evil = { ...answered, text: '<img src=x onerror="window.__pwned=1">hello' };
     const { container } = render(<AnswerView answer={evil} onHow={() => {}} />);

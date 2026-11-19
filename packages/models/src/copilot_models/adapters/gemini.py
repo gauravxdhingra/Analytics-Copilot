@@ -29,7 +29,9 @@ _BLOCKED = {"SAFETY", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII", "RECITATION", "
 class GeminiSettings:
     api_key: str = field(repr=False)
     models: Mapping[ModelRole, str] = field(default_factory=dict)
+    default_model: str = DEFAULT_MODEL  # for roles with no entry in `models`
     fallback_model: str | None = DEFAULT_FALLBACK
+    base_url: str | None = None  # a proxy or gateway in front of the API; None means Google's
     max_attempts: int = 3
     base_delay_seconds: float = 0.5
     max_delay_seconds: float = 4.0
@@ -37,19 +39,29 @@ class GeminiSettings:
     prices_per_million: Mapping[str, tuple[Decimal, Decimal]] = field(default_factory=dict)
 
     def model_for(self, role: ModelRole) -> str:
-        return self.models.get(role, DEFAULT_MODEL)
+        return self.models.get(role, self.default_model)
 
     @classmethod
     def from_env(cls) -> "GeminiSettings":
+        # A blank value (an empty line in an .env template) counts as not set.
+        def given(name: str) -> str | None:
+            return os.environ.get(name) or None
+
+        shared = given("GEMINI_MODEL")
         models = {
-            role: os.environ[f"GEMINI_MODEL_{role.name}"]
+            role: name
             for role in ModelRole
-            if f"GEMINI_MODEL_{role.name}" in os.environ
+            if (name := given(f"GEMINI_MODEL_{role.name}")) is not None
         }
+        # Never invent a fallback the operator did not choose: if they named their own model,
+        # the built-in fallback (an unverified name) would only add a second way to fail.
+        fallback = given("GEMINI_FALLBACK_MODEL") or (None if shared else DEFAULT_FALLBACK)
         return cls(
             api_key=os.environ.get("GEMINI_API_KEY", ""),
             models=models,
-            fallback_model=os.environ.get("GEMINI_FALLBACK_MODEL", DEFAULT_FALLBACK),
+            default_model=shared or DEFAULT_MODEL,
+            fallback_model=fallback,
+            base_url=given("GEMINI_BASE_URL"),
         )
 
 
@@ -77,7 +89,12 @@ class GeminiClient:
         if not settings.api_key:
             raise ModelError(ModelErrorCode.AUTH)  # fail closed: no key, no model
         self._settings = settings
-        self._sdk = sdk_client or genai.Client(api_key=settings.api_key)
+        self._sdk = sdk_client or genai.Client(
+            api_key=settings.api_key,
+            http_options=types.HttpOptions(base_url=settings.base_url)
+            if settings.base_url
+            else None,
+        )
         self._sleep = sleep
         self._jitter = jitter
 

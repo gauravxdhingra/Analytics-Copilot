@@ -258,3 +258,25 @@ async def test_the_caps_hold_against_a_planner_that_never_gets_it_right(
         answer = await agent.run("How many?", await _ctx("ana.analyst"))
     assert answer.status is AnswerStatus.FAILED and answer.usage.tool_calls == 0
     assert answer.usage.model_calls == 1 + caps.max_plan_attempts
+
+
+async def test_a_result_cut_short_by_the_row_cap_says_so(pg_ledger: PostgresLedger) -> None:
+    # Three currencies exist on this date. With a cap of two, the answer must not look complete.
+    spec = {
+        "store": "treasury.daily_balances",
+        "select": [
+            {"column": "daily_balances.currency"},
+            {"column": "daily_balances.closing", "agg": "sum", "alias": "total"},
+        ],
+        "filters": [{"column": "daily_balances.balance_date", "op": "=", "values": ["2026-06-30"]}],
+        "limit": 2,
+    }
+    async with _agent([route(), plan(spec), narrate("Two currencies shown.")], pg_ledger) as (
+        agent,
+        _,
+    ):
+        answer = await agent.run("Cash by currency at 30 June 2026?", await _ctx("maria.manager"))
+    assert answer.table is not None
+    assert len(answer.table.rows) == 2
+    assert answer.table.truncated is True
+    assert any("truncated" in caveat for caveat in answer.caveats)

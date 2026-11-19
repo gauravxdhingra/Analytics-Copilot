@@ -42,7 +42,7 @@ class Relationship(_Strict):
     name: str
     to: str
     join_on: list[tuple[str, str]]  # (column here, column there)
-    cardinality: Literal["one_to_one", "many_to_one", "one_to_many"]
+    cardinality: Literal["one_to_one", "many_to_one", "one_to_many", "many_to_many"]
 
 
 class Store(_Strict):

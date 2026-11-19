@@ -242,3 +242,47 @@ def test_missing_key_fails_closed_at_construction() -> None:
     with pytest.raises(ModelError) as info:
         GeminiClient(GeminiSettings(api_key=""))
     assert info.value.code is ModelErrorCode.AUTH
+
+
+def _clean(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in ("GEMINI_API_KEY", "GEMINI_MODEL", "GEMINI_FALLBACK_MODEL", "GEMINI_BASE_URL"):
+        monkeypatch.delenv(name, raising=False)
+    for role in ModelRole:
+        monkeypatch.delenv(f"GEMINI_MODEL_{role.name}", raising=False)
+
+
+def test_one_model_name_applies_to_every_role(monkeypatch: pytest.MonkeyPatch) -> None:
+    _clean(monkeypatch)
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+    monkeypatch.setenv("GEMINI_MODEL", "my-model")
+    settings = GeminiSettings.from_env()
+    assert {settings.model_for(role) for role in ModelRole} == {"my-model"}
+
+
+def test_a_role_specific_name_beats_the_shared_one(monkeypatch: pytest.MonkeyPatch) -> None:
+    _clean(monkeypatch)
+    monkeypatch.setenv("GEMINI_MODEL", "shared")
+    monkeypatch.setenv("GEMINI_MODEL_PLANNER", "planner-only")
+    settings = GeminiSettings.from_env()
+    assert settings.model_for(ModelRole.PLANNER) == "planner-only"
+    assert settings.model_for(ModelRole.ROUTER) == "shared"
+
+
+def test_an_empty_value_means_not_set(monkeypatch: pytest.MonkeyPatch) -> None:
+    # An .env template often has blank lines such as GEMINI_MODEL= ; they must not become "".
+    _clean(monkeypatch)
+    monkeypatch.setenv("GEMINI_MODEL", "")
+    monkeypatch.setenv("GEMINI_BASE_URL", "")
+    settings = GeminiSettings.from_env()
+    assert settings.model_for(ModelRole.ROUTER) != ""
+    assert settings.base_url is None
+
+
+def test_a_base_url_is_read_when_given(monkeypatch: pytest.MonkeyPatch) -> None:
+    _clean(monkeypatch)
+    monkeypatch.setenv("GEMINI_BASE_URL", "https://proxy.example/gemini")
+    assert GeminiSettings.from_env().base_url == "https://proxy.example/gemini"
+
+
+def test_the_key_never_appears_in_the_settings_repr() -> None:
+    assert "secret-value" not in repr(GeminiSettings(api_key="secret-value"))
