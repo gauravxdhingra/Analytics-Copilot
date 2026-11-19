@@ -4,6 +4,10 @@ Enterprise treasury assistant: a global chatbot in a web app that answers questi
 
 **Status:** the V1 vertical slice is built and runs end to end (`make demo`); the rest of the specification is still design only. Plan: `docs/stages/V1-vertical-slice.md`.
 
+## Priority note
+
+Before changing the world generator, the catalogue or the gold set, read the private data review: `.private/data-review.md` (git-ignored). **High priority.**
+
 ## Source of truth
 
 | File | Read it for |
