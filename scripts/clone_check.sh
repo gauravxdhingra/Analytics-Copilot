@@ -22,6 +22,17 @@ done
 
 cleanup() {
   status=$?
+  if [ "$status" -ne 0 ]; then
+    # Show why before the evidence is torn down.
+    echo "== clone-check FAILED (exit $status): last log lines" >&2
+    docker compose -p "$project" -f "$work/repo/deploy/compose/compose.yaml" \
+      ps --all --format '{{.Service}} {{.Status}}' >&2 || true
+    for svc in keycloak bootstrap postgres bff approval; do
+      echo "-- $svc" >&2
+      docker compose -p "$project" -f "$work/repo/deploy/compose/compose.yaml" \
+        logs --no-color --tail 25 "$svc" >&2 2>&1 || true
+    done
+  fi
   docker compose -p "$project" -f "$work/repo/deploy/compose/compose.yaml" \
     down --volumes --remove-orphans >/dev/null 2>&1 || true
   rm -rf "$work"
