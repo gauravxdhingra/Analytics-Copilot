@@ -367,3 +367,125 @@ async def test_a_400_with_an_unreadable_body_is_a_bad_request(request_: ModelReq
     with pytest.raises(ModelError) as info:
         await _client(Wire(httpx.Response(400, text="<html>nope</html>"))).generate(request_)
     assert info.value.code is ModelErrorCode.BAD_REQUEST
+
+
+# --- pacing: wait before sending when the next request would not fit -------------------------
+
+
+class PacedClock:
+    """A clock that only moves when the (fake) sleep is called."""
+
+    def __init__(self) -> None:
+        self.now = 1000.0
+        self.slept: list[float] = []
+
+    def __call__(self) -> float:
+        return self.now
+
+    async def sleep(self, seconds: float) -> None:
+        self.slept.append(seconds)
+        self.now += seconds
+
+
+def _with_limits(text: str, remaining: int, reset: str) -> httpx.Response:
+    headers = {"x-ratelimit-remaining-tokens": str(remaining), "x-ratelimit-reset-tokens": reset}
+    return httpx.Response(200, json=_reply(text), headers=headers)
+
+
+def _paced(wire: Wire, clock: PacedClock, **overrides: Any) -> GroqClient:
+    settings = GroqSettings(api_key=KEY, **overrides)
+    return GroqClient(
+        settings,
+        http=httpx.AsyncClient(transport=httpx.MockTransport(wire)),
+        sleep=clock.sleep,
+        jitter=lambda: 1.0,
+        clock=clock,
+    )
+
+
+def _big(request_: ModelRequest) -> ModelRequest:
+    return request_.model_copy(update={"system": "x" * 7000, "max_output_tokens": 2048})
+
+
+@pytest.mark.parametrize(
+    ("text", "seconds"),
+    [("7.66s", 7.66), ("2m59.56s", 179.56), ("250ms", 0.25), ("1h", 3600.0), ("1m", 60.0)],
+)
+def test_the_providers_duration_format_is_understood(text: str, seconds: float) -> None:
+    from copilot_models.adapters.groq import parse_duration
+
+    assert parse_duration(text) == pytest.approx(seconds)
+
+
+@pytest.mark.parametrize("text", ["", "soon", "-3s", "5 parsecs"])
+def test_an_unreadable_duration_is_none(text: str) -> None:
+    from copilot_models.adapters.groq import parse_duration
+
+    assert parse_duration(text) is None
+
+
+async def test_it_waits_for_the_window_when_the_next_request_would_not_fit(
+    request_: ModelRequest,
+) -> None:
+    clock = PacedClock()
+    wire = Wire(_with_limits("one", remaining=300, reset="9s"), _json(_reply("two")))
+    client = _paced(wire, clock)
+    await client.generate(request_)
+    await client.generate(_big(request_))  # needs about 2,500 tokens; only 300 are left
+    assert clock.slept == [pytest.approx(9.0)]
+    assert len(wire.requests) == 2  # it waited instead of sending a doomed request
+
+
+async def test_it_does_not_wait_when_there_is_room(request_: ModelRequest) -> None:
+    clock = PacedClock()
+    wire = Wire(_with_limits("one", remaining=7000, reset="9s"), _json(_reply("two")))
+    client = _paced(wire, clock)
+    await client.generate(request_)
+    await client.generate(request_)
+    assert clock.slept == []
+
+
+async def test_without_limit_headers_it_never_waits(request_: ModelRequest) -> None:
+    clock = PacedClock()
+    wire = Wire(_json(_reply("one")), _json(_reply("two")))
+    client = _paced(wire, clock)
+    await client.generate(request_)
+    await client.generate(_big(request_))
+    assert clock.slept == []
+
+
+async def test_a_window_that_has_already_passed_costs_nothing(request_: ModelRequest) -> None:
+    clock = PacedClock()
+    wire = Wire(_with_limits("one", remaining=100, reset="5s"), _json(_reply("two")))
+    client = _paced(wire, clock)
+    await client.generate(request_)
+    clock.now += 6  # time passes on its own
+    await client.generate(_big(request_))
+    assert clock.slept == []
+
+
+async def test_the_wait_is_capped(request_: ModelRequest) -> None:
+    clock = PacedClock()
+    wire = Wire(_with_limits("one", remaining=10, reset="5m"), _json(_reply("two")))
+    client = _paced(wire, clock, max_retry_after_seconds=20.0)
+    await client.generate(request_)
+    await client.generate(_big(request_))
+    assert clock.slept == [20.0]
+
+
+async def test_a_rate_limited_retry_does_not_wait_twice_for_the_same_window(
+    request_: ModelRequest,
+) -> None:
+    clock = PacedClock()
+    limited = httpx.Response(
+        429,
+        json={},
+        headers={
+            "retry-after": "9",
+            "x-ratelimit-remaining-tokens": "0",
+            "x-ratelimit-reset-tokens": "9s",
+        },
+    )
+    wire = Wire(limited, _json(_reply("later")))
+    await _paced(wire, clock).generate(request_)
+    assert clock.slept == [9.0]  # once, from the retry hint, not again from the pacer

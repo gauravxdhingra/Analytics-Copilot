@@ -8,6 +8,7 @@ import asyncio
 import json
 import os
 import random
+import re
 import time
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
@@ -105,6 +106,53 @@ def _retry_after(response: httpx.Response) -> float | None:
     return seconds if seconds > 0 else None
 
 
+_DURATION = re.compile(r"(\d+(?:\.\d+)?)(ms|h|m|s)")
+_UNIT = {"ms": 0.001, "s": 1.0, "m": 60.0, "h": 3600.0}
+
+
+def parse_duration(text: str) -> float | None:
+    """The provider's reset format ("7.66s", "2m59.56s", "250ms") in seconds, or None."""
+    text = text.strip()
+    parts = _DURATION.findall(text)
+    if not parts or "".join(n + u for n, u in parts) != text:
+        return None
+    return sum(float(n) * _UNIT[u] for n, u in parts)
+
+
+class _Pacer:
+    """Remembers how many tokens the provider says are left in the current window.
+
+    Sending a request that cannot fit only earns a 429 and wastes a request, so wait for the
+    window to reset first. With no headers there is nothing to go on, and it never waits.
+    """
+
+    def __init__(self, clock: Callable[[], float]) -> None:
+        self._clock = clock
+        self._remaining: int | None = None
+        self._resets_at: float | None = None
+
+    def observe(self, headers: httpx.Headers) -> None:
+        try:
+            remaining = int(headers["x-ratelimit-remaining-tokens"])
+        except (KeyError, ValueError):
+            return
+        reset = parse_duration(headers.get("x-ratelimit-reset-tokens", ""))
+        self._remaining = remaining
+        self._resets_at = self._clock() + reset if reset is not None else None
+
+    def wait_for(self, needed: int) -> float:
+        if self._remaining is None or self._resets_at is None or self._remaining >= needed:
+            return 0.0
+        return max(0.0, self._resets_at - self._clock())
+
+
+def _estimate_tokens(request: ModelRequest) -> int:
+    """A deliberately rough size of a request: prompt at about 3.5 characters a token, plus a
+    typical reply. An underestimate only costs one 429, which the retry hint then handles."""
+    prompt = len(request.system) + sum(len(m.content) for m in request.messages)
+    return int(prompt / 3.5) + min(request.max_output_tokens, 800)
+
+
 class GroqClient:
     def __init__(
         self,
@@ -113,6 +161,7 @@ class GroqClient:
         http: httpx.AsyncClient | None = None,  # a test stand-in, or a shared client
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         jitter: Callable[[], float] = random.random,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         if not settings.api_key:
             raise ModelError(ModelErrorCode.AUTH)  # fail closed: no key, no model
@@ -120,6 +169,7 @@ class GroqClient:
         self._http = http or httpx.AsyncClient()
         self._sleep = sleep
         self._jitter = jitter
+        self._pacer = _Pacer(clock)
 
     async def generate(self, request: ModelRequest) -> ModelResponse:
         primary = self._settings.model_for(request.role)
@@ -154,6 +204,11 @@ class GroqClient:
         raise AssertionError("unreachable")
 
     async def _call(self, model: str, request: ModelRequest) -> ModelResponse:
+        wait = min(
+            self._pacer.wait_for(_estimate_tokens(request)), self._settings.max_retry_after_seconds
+        )
+        if wait > 0:
+            await self._sleep(wait)  # let the window reset instead of sending a doomed request
         started = time.monotonic()
         try:
             response = await asyncio.wait_for(
@@ -169,6 +224,7 @@ class GroqClient:
             raise ModelError(ModelErrorCode.TIMEOUT) from None
         except httpx.TransportError:
             raise ModelError(ModelErrorCode.UNAVAILABLE) from None
+        self._pacer.observe(response.headers)
         if response.status_code != 200:
             # The provider's message is never read: it can echo request content or the key.
             if response.status_code == 400 and _provider_code(response) == "json_validate_failed":
