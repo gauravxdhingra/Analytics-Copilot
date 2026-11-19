@@ -484,3 +484,18 @@ async def test_the_planner_is_told_how_signed_amounts_rank(gateway: FakeGateway)
     await orchestrator.run(QUESTION, make_ctx())
     prompt = model.requests[1].system + " ".join(m.content for m in model.requests[1].messages)
     assert "most negative" in prompt and "ascending" in prompt
+
+
+async def test_reused_rows_are_disclosed_in_the_answer(gateway: FakeGateway) -> None:
+    gateway.queue(_allowed(cached=True))
+    orchestrator, _ = build([route(), plan(), narrate("There are 776.")], gateway)
+    answer = await orchestrator.run(QUESTION, make_ctx())
+    note = next(c for c in answer.caveats if "Reused" in c)
+    assert "your own" in note and "2026-06-30" in note  # whose query it was, and as of when
+
+
+async def test_fresh_rows_carry_no_reuse_note(gateway: FakeGateway) -> None:
+    gateway.queue(_allowed(cached=False))
+    orchestrator, _ = build([route(), plan(), narrate("There are 776.")], gateway)
+    answer = await orchestrator.run(QUESTION, make_ctx())
+    assert not any("Reused" in c for c in answer.caveats)

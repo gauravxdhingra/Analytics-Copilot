@@ -476,6 +476,9 @@ class InsightsOrchestrator:
         caveats = list(state.caveats)
         if table.as_of:
             caveats.append(f"Data as of {table.as_of}.")
+        if out.get("cached"):
+            when = f", data as of {table.as_of[:10]}" if table.as_of else ""
+            caveats.append(f"Reused from your own identical query a moment ago{when}.")
         if table.truncated:
             caveats.append(f"Showing the first {len(table.rows)} rows; more rows match.")
         # By default only current, booked rows count. If the plan waived either rule, the numbers

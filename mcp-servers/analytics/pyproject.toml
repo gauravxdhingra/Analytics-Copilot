@@ -6,6 +6,7 @@ requires-python = ">=3.12"
 dependencies = [
   "copilot-auth",
   "copilot-mcp-common",
+  "copilot-memory",
   "copilot-schemas",
   "copilot-tracing",
   "copilot-catalogue",
@@ -24,6 +25,7 @@ build-backend = "hatchling.build"
 packages = ["src/mcp_analytics"]
 
 [tool.uv.sources]
+copilot-memory = { workspace = true }
 copilot-auth = { workspace = true }
 copilot-mcp-common = { workspace = true }
 copilot-schemas = { workspace = true }

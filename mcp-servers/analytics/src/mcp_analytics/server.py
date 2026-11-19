@@ -16,6 +16,7 @@ from typing import Any, Protocol
 from copilot_auth import AuthError, TokenValidator
 from copilot_catalogue import Catalogue
 from copilot_mcp import new_server
+from copilot_memory import Owner, ResultCache, cache_key
 from copilot_schemas import Evidence, Provenance
 from copilot_tracing import Tracing
 from mcp.server.auth.middleware.auth_context import get_access_token
@@ -49,6 +50,7 @@ class Deps:
     resource_url: str
     verifier: SqlVerifier = field(default_factory=PassThroughVerifier)
     tracing: Tracing | None = None
+    cache: ResultCache | None = None  # per user; None means every question runs fresh
 
 
 class Column(BaseModel):
@@ -112,6 +114,7 @@ class SelectResult(BaseModel):
     warnings: list[str]
     catalogue_version: str
     evidence: list[Evidence]
+    cached: bool = False  # True when the rows came from this user's own recent identical query
 
 
 def _evidence(tool: str, ref: str, as_of: str | None) -> Evidence:
@@ -154,6 +157,14 @@ def build_server(deps: Deps) -> MCPServer:
             return await deps.exchanger.exchange(caller.token, QUERY_API_AUDIENCE)
         except AuthError:
             raise ToolError("UNAUTHENTICATED") from None
+
+    def _cache_owner() -> Owner | None:
+        """Whose cache this is: the validated caller's tenant and user, never anything sent in."""
+        caller = get_access_token()
+        tenant = (caller.claims or {}).get("tenant_id") if caller else None
+        if caller is None or not caller.subject or not isinstance(tenant, str):
+            return None  # without a clear owner there is no cache
+        return Owner(tenant_id=tenant, user_id=caller.subject)
 
     async def guarded(call: Any) -> Any:
         try:
@@ -269,17 +280,36 @@ def build_server(deps: Deps) -> MCPServer:
         bound: list[Any] = list(params or [])
         flags = VerifyFlags(include_history, include_cancelled, date_field)
         with traced(ctx, "run_validated_select"):
+            # Authentication happened at the transport and verification happens here, both
+            # before the cache is consulted: a hit only saves the Query API call.
             warnings = _verify(sql, bound, flags)
-            reply = await guarded(
-                deps.query_api.query(
-                    await query_api_token(),
-                    sql=sql,
-                    params=bound,
-                    purpose=purpose,
-                    max_rows=max_rows,
-                    timeout_ms=30_000,
-                )
+            owner = _cache_owner()
+            key = cache_key(
+                sql,
+                bound,
+                {
+                    "max_rows": max_rows,
+                    "history": include_history,
+                    "cancelled": include_cancelled,
+                    "date_field": date_field,
+                },
             )
+            hit = deps.cache.get(owner, key) if deps.cache and owner else None
+            if hit is not None:
+                reply = hit
+            else:
+                reply = await guarded(
+                    deps.query_api.query(
+                        await query_api_token(),
+                        sql=sql,
+                        params=bound,
+                        purpose=purpose,
+                        max_rows=max_rows,
+                        timeout_ms=30_000,
+                    )
+                )
+                if deps.cache and owner:  # only a successful reply gets here: errors are never kept
+                    deps.cache.put(owner, key, reply)
         query_hash = _query_hash(sql, bound)
         names = [c["name"] for c in reply["columns"]]
         return SelectResult(
@@ -293,6 +323,7 @@ def build_server(deps: Deps) -> MCPServer:
             warnings=warnings,
             catalogue_version=deps.catalogue.version,
             evidence=[_evidence("run_validated_select", query_hash, reply.get("as_of"))],
+            cached=hit is not None,
         )
 
     return server

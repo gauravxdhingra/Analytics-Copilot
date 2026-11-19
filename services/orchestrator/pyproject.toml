@@ -12,6 +12,7 @@ dependencies = [
   "copilot-policy-gateway",
   "copilot-tracing",
   "copilot-drafts",
+  "copilot-memory",
   "copilot-query-api",
   "copilot-mcp-analytics",
   "copilot-mcp-drafts",
@@ -29,6 +30,7 @@ build-backend = "hatchling.build"
 packages = ["src/orchestrator"]
 
 [tool.uv.sources]
+copilot-memory = { workspace = true }
 copilot-auth = { workspace = true }
 copilot-schemas = { workspace = true }
 copilot-models = { workspace = true }

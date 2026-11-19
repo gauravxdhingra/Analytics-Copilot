@@ -8,6 +8,7 @@ import pytest
 from copilot_auth import StaticKeyProvider, TokenValidator
 from copilot_auth.testing import AUDIENCE, ISSUER, KID, NOW, mint_token
 from copilot_catalogue import Catalogue
+from copilot_memory import ResultCache
 from copilot_sql_verifier import Verifier
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
@@ -38,6 +39,12 @@ def exchanger() -> FakeExchanger:
 
 
 @pytest.fixture
+def cache() -> ResultCache | None:
+    """Off by default; the cache tests override this."""
+    return None
+
+
+@pytest.fixture
 def token(key: RSAPrivateKey) -> str:
     return mint_token(key, aud=MCP_AUDIENCE)
 
@@ -49,7 +56,11 @@ def verifier(request: pytest.FixtureRequest) -> SqlVerifier:
 
 @pytest.fixture
 def connect(
-    key: RSAPrivateKey, query_api: FakeQueryApi, exchanger: FakeExchanger, verifier: SqlVerifier
+    key: RSAPrivateKey,
+    query_api: FakeQueryApi,
+    exchanger: FakeExchanger,
+    verifier: SqlVerifier,
+    cache: ResultCache | None,
 ) -> Callable[[str | None], AbstractAsyncContextManager[Client]]:
     """Returns `connect(token)`, an async context manager yielding a connected MCP client.
 
@@ -73,6 +84,7 @@ def connect(
                 issuer_url=ISSUER,
                 resource_url="http://mcp/mcp",
                 verifier=verifier,
+                cache=cache,
             )
         )
         return server.streamable_http_app(

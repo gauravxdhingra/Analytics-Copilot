@@ -281,3 +281,27 @@ async def test_a_result_cut_short_by_the_row_cap_says_so(pg_ledger: PostgresLedg
     assert answer.table.truncated is True
     assert any("first 2 rows" in caveat and "more" in caveat for caveat in answer.caveats)
     assert not any("truncated" in caveat for caveat in answer.caveats)  # not alarming, just exact
+
+
+async def test_a_repeated_question_is_served_from_the_users_own_cache(
+    pg_ledger: PostgresLedger,
+) -> None:
+    script = [route(), plan(COUNT), narrate("A count."), route(), plan(COUNT), narrate("A count.")]
+    async with _agent(script, pg_ledger) as (agent, _):
+        ctx = await _ctx("ana.analyst")
+        first = await agent.run("How many booked transactions?", ctx)
+        second = await agent.run("How many booked transactions?", await _ctx("ana.analyst"))
+    assert first.table is not None and second.table is not None
+    assert first.table.rows == second.table.rows == [[_booked("HAL-DE")]]
+    assert not any("Reused" in c for c in first.caveats)
+    assert any("Reused" in c for c in second.caveats)
+
+
+async def test_the_cache_never_crosses_users(pg_ledger: PostgresLedger) -> None:
+    script = [route(), plan(COUNT), narrate("A count."), route(), plan(COUNT), narrate("A count.")]
+    async with _agent(script, pg_ledger) as (agent, _):
+        ana = await agent.run("How many booked transactions?", await _ctx("ana.analyst"))
+        ben = await agent.run("How many booked transactions?", await _ctx("ben.analyst"))
+    assert ana.table is not None and ben.table is not None
+    assert ana.table.rows == [[_booked("HAL-DE")]] and ben.table.rows == [[_booked("HAL-UK")]]
+    assert not any("Reused" in c for c in ben.caveats)  # ben's answer was computed for ben

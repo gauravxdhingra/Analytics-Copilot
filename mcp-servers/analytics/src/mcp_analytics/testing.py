@@ -25,6 +25,9 @@ class FakeQueryApi:
     def fail_with(self, code: str) -> None:
         self._failure = code
 
+    def recover(self) -> None:
+        self._failure = None
+
     async def query(
         self,
         token: str,

@@ -16,6 +16,7 @@ import httpx2
 from copilot_auth import JwksKeyProvider, TokenExchangeClient, TokenValidator
 from copilot_catalogue import Catalogue
 from copilot_drafts import DraftsRepo, PostgresEntitlements
+from copilot_memory import InMemoryResultCache
 from copilot_sql_verifier import Verifier
 from copilot_tracing import Tracing
 from mcp.server.transport_security import TransportSecuritySettings
@@ -38,6 +39,15 @@ class LocalStack:
     gateway: Gateway
     catalogue: Catalogue
     policy: Policy
+
+
+def _result_cache(env: Mapping[str, str]) -> InMemoryResultCache | None:
+    """A per-user result cache, five minutes by default; RESULT_CACHE_TTL_SECONDS=0 turns it off."""
+    try:
+        ttl = float(env.get("RESULT_CACHE_TTL_SECONDS", "300"))
+    except ValueError:
+        ttl = 300.0
+    return InMemoryResultCache(ttl_seconds=ttl) if ttl > 0 else None
 
 
 @asynccontextmanager
@@ -88,6 +98,7 @@ async def local_stack(
                 issuer_url=issuer,
                 resource_url="http://mcp/mcp",
                 tracing=tracing,
+                cache=_result_cache(env),
             )
         )
         mcp_app = server.streamable_http_app(
