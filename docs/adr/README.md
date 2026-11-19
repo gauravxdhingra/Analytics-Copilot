@@ -10,3 +10,4 @@ Backlog of decisions to write up: ARCHITECTURE.md §15. Decision table: Analytic
 | [0002](0002-model-port-and-gemini-adapter.md) | Provider-neutral model port with a Gemini default adapter | Accepted | D3, ARCH §15 #2 |
 | [0003](0003-keycloak-oidc-token-exchange-and-rls.md) | Keycloak OIDC, audience-bound token exchange, and database-enforced scope | Accepted | D6, D8, ARCH §15 #12 |
 | [0004](0004-engineering-stack-and-monorepo.md) | Engineering stack and monorepo layout | Proposed | CLAUDE.md Stack |
+| [0005](0005-memory-and-caching.md) | Memory and caching: per-user, user-written, and never trusted | Proposed | §10.4, D6, D8 |

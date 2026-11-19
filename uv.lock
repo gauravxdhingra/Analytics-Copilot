@@ -21,6 +21,7 @@ members = [
     "copilot-mcp-analytics",
     "copilot-mcp-common",
     "copilot-mcp-drafts",
+    "copilot-memory",
     "copilot-models",
     "copilot-orchestrator",
     "copilot-policy-gateway",
@@ -680,6 +681,21 @@ requires-dist = [
     { name = "copilot-schemas", editable = "packages/schemas" },
     { name = "copilot-tracing", editable = "packages/tracing" },
     { name = "mcp", specifier = ">=2.3" },
+    { name = "pydantic", specifier = ">=2.7" },
+]
+
+[[package]]
+name = "copilot-memory"
+version = "0.1.0"
+source = { editable = "packages/memory" }
+dependencies = [
+    { name = "psycopg", extra = ["binary"] },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
     { name = "pydantic", specifier = ">=2.7" },
 ]
 

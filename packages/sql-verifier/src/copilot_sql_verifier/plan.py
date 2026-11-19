@@ -55,6 +55,7 @@ class QueryPlan(_Strict):
     filters: list[PlanFilter] = Field(default_factory=list)
     order_by: list[OrderItem] = Field(default_factory=list)
     limit: int = Field(ge=1, le=5000)
+    offset: int = Field(default=0, ge=0, le=100_000)  # for follow-ups such as "the next 5"
     include_history: bool = False
     include_cancelled: bool = False
 
@@ -238,6 +239,11 @@ def render(plan: QueryPlan, catalogue: Catalogue) -> RenderedQuery:
         parts.append("ORDER BY " + ", ".join(order))
     # One past the cap: the Query API fetches cap + 1 to learn whether the result was cut short.
     parts.append(f"LIMIT {plan.limit + 1}")
+    if plan.offset:
+        if not order:
+            # Without an order, rows can come back differently each time, so pages would overlap.
+            raise PlanError("OFFSET_NEEDS_ORDER", "paging needs an order_by")
+        parts.append(f"OFFSET {plan.offset}")
     options = VerifyOptions(
         history_requested=plan.include_history, include_cancelled=plan.include_cancelled
     )

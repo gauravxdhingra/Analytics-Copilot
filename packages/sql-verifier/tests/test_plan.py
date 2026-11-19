@@ -264,3 +264,34 @@ def test_untrusted_text_may_be_selected_plainly_or_counted() -> None:
         select=[{"column": "transactions.remittance_text", "agg": "count", "alias": "n"}]
     )
     assert "COUNT(" in render(counted, CATALOGUE).sql
+
+
+def _ranked(**overrides: Any) -> QueryPlan:
+    return _plan(
+        select=[{"column": "transactions.transaction_id"}, {"column": "transactions.amount"}],
+        order_by=[{"column": "transactions.amount"}, {"column": "transactions.transaction_id"}],
+        limit=5,
+        **overrides,
+    )
+
+
+def test_an_offset_pages_through_an_ordered_result() -> None:
+    query = render(_ranked(offset=5), CATALOGUE)
+    assert query.sql.endswith("LIMIT 6 OFFSET 5")  # the extra row still tells us there is more
+    VERIFIER.verify(*_verify_args(query))
+
+
+def test_no_offset_adds_nothing_to_the_sql() -> None:
+    assert "OFFSET" not in render(_ranked(), CATALOGUE).sql
+
+
+def test_paging_without_an_order_is_refused_because_the_pages_would_not_be_stable() -> None:
+    with pytest.raises(PlanError) as info:
+        render(_plan(offset=5, order_by=[]), CATALOGUE)
+    assert info.value.code == "OFFSET_NEEDS_ORDER"
+
+
+@pytest.mark.parametrize("bad", [-1, 100_001])
+def test_an_offset_is_bounded(bad: int) -> None:
+    with pytest.raises(ValueError, match="offset"):
+        _plan(offset=bad)

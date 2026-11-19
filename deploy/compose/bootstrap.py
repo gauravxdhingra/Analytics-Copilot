@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 
 from copilot_drafts import ensure_schema as ensure_drafts
+from copilot_memory import ensure_schema as ensure_memory
 from halcyon_world import generate_world
 from halcyon_world.load import load_world
 from policy_gateway.postgres_ledger import ensure_schema as ensure_ledger
@@ -28,6 +29,7 @@ def main() -> None:
         drafts_password=os.environ["DRAFTS_DB_PASSWORD"],
         approval_password=os.environ["APPROVAL_DB_PASSWORD"],
     )
+    ensure_memory(owner, memory_password=os.environ["MEMORY_DB_PASSWORD"])
     print("bootstrap complete")
 
 
