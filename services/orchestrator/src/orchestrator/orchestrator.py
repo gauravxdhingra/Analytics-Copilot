@@ -37,6 +37,14 @@ DRAFT_TOOL = "drafts.create_draft"
 SELECT_TOOL = "analytics.run_validated_select"
 _TABLE_ROWS_FOR_NARRATOR = 50
 _REPAIRABLE = {"SYNTAX", "UNKNOWN_OBJECT", "BAD_PARAMS", "NOT_SELECT"}
+# What a bare tool code usually means, so the planner can correct itself instead of repeating it.
+_REPAIR_HINTS = {
+    "BAD_PARAMS": (
+        "A filter value did not fit its column. Dates must be real calendar dates written as "
+        "YYYY-MM-DD (for example 2026-07-01, the exclusive end of June; there is no 2026-06-31), "
+        "and numbers must be numbers."
+    ),
+}
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -48,6 +56,10 @@ class ToolCaller(Protocol):
     async def call(
         self, ctx: RunContext, agent_id: str, tool: str, args: dict[str, Any]
     ) -> ToolOutcome: ...
+
+
+# Reasoning models think before they answer; a plan cut off mid-JSON is a failed run.
+PLANNER_MAX_OUTPUT_TOKENS = 2048
 
 
 class _State(BaseModel):
@@ -275,6 +287,7 @@ class InsightsOrchestrator:
         user: str,
         schema: type[T],
         temperature: float,
+        max_output_tokens: int = 1024,
     ) -> _Asked:
         request = ModelRequest(
             role=role,
@@ -283,6 +296,7 @@ class InsightsOrchestrator:
             messages=[Message(role="user", content=user)],
             output_schema=schema.model_json_schema(),
             temperature=temperature,
+            max_output_tokens=max_output_tokens,
             timeout_seconds=self._caps.model_timeout_s,
         )
         updates: dict[str, Any] = {"model_calls": state.model_calls + 1}
@@ -404,6 +418,7 @@ class InsightsOrchestrator:
             user,
             PlanOut,
             0.1,
+            max_output_tokens=PLANNER_MAX_OUTPUT_TOKENS,
         )
         if asked.error == "invalid_response":
             return self._repair(
@@ -480,7 +495,8 @@ class InsightsOrchestrator:
         if denial.reason == "UPSTREAM_ERROR":
             code = detail.split()[0] if detail else ""
             if code == "VERIFIER_REJECTED" or code in _REPAIRABLE:
-                return self._repair(state, state.attempts, detail or code, counted)
+                hint = _REPAIR_HINTS.get(code, detail or code)
+                return self._repair(state, state.attempts, hint, counted)
             if code == "PERMISSION":
                 return self._stop(counted, state, AnswerStatus.REFUSED, "not_permitted", step)
             if code == "TIMEOUT":

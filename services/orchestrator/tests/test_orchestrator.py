@@ -585,3 +585,32 @@ async def test_the_prompts_that_changed_have_new_versions() -> None:
     from orchestrator import prompts
 
     assert prompts.ROUTER_VERSION != "router@1" and prompts.PLANNER_VERSION != "planner@1"
+
+
+async def test_the_planner_gets_room_to_reason_and_still_finish_its_plan(
+    gateway: FakeGateway,
+) -> None:
+    # A reasoning model spends part of its budget thinking. A plan cut off mid-JSON is a failed
+    # run, so the planner (the largest structured output) is given more headroom than the rest.
+    gateway.queue(_allowed())
+    orchestrator, model = build([route(), plan(), narrate("There are 776.")], gateway)
+    await orchestrator.run(QUESTION, make_ctx())
+    router, planner, narrator = model.requests
+    assert planner.max_output_tokens >= 2048
+    assert router.max_output_tokens < planner.max_output_tokens
+    assert narrator.max_output_tokens < planner.max_output_tokens
+
+
+async def test_a_rejected_parameter_comes_back_to_the_planner_with_an_explanation(
+    gateway: FakeGateway,
+) -> None:
+    # The planner only ever saw the bare code BAD_PARAMS. A real model needs to be told what
+    # usually causes it, or it repeats the mistake until the repair budget is gone.
+    gateway.queue(
+        Denied("UPSTREAM_ERROR", "BAD_PARAMS The parameters do not match the query."), _allowed()
+    )
+    orchestrator, model = build([route(), plan(), plan(), narrate("There are 776.")], gateway)
+    answer = await orchestrator.run(QUESTION, make_ctx())
+    assert answer.status is AnswerStatus.ANSWERED
+    feedback = " ".join(m.content for m in model.requests[2].messages)
+    assert "real calendar date" in feedback and "YYYY-MM-DD" in feedback

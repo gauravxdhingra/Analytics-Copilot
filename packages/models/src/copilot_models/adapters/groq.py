@@ -87,6 +87,15 @@ def _map_status(code: int) -> ModelErrorCode:
     return ModelErrorCode.BAD_REQUEST
 
 
+def _provider_code(response: httpx.Response) -> str | None:
+    """The provider's short, fixed error code. Its message and any generated text are never read."""
+    try:
+        code = response.json()["error"]["code"]
+    except (ValueError, KeyError, TypeError):
+        return None
+    return code if isinstance(code, str) else None
+
+
 def _retry_after(response: httpx.Response) -> float | None:
     """The provider's wait hint in seconds, if it sent a usable one."""
     try:
@@ -162,6 +171,10 @@ class GroqClient:
             raise ModelError(ModelErrorCode.UNAVAILABLE) from None
         if response.status_code != 200:
             # The provider's message is never read: it can echo request content or the key.
+            if response.status_code == 400 and _provider_code(response) == "json_validate_failed":
+                # Structured output that was cut off or did not match the schema: a bad
+                # response, which the caller can repair, rather than a bad request.
+                raise ModelError(ModelErrorCode.INVALID_RESPONSE)
             raise ModelError(_map_status(response.status_code), retry_after=_retry_after(response))
         return self._convert(response, model, int((time.monotonic() - started) * 1000))
 

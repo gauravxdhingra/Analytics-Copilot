@@ -327,3 +327,43 @@ async def test_the_hint_never_leaks_into_the_error_text(request_: ModelRequest) 
     with pytest.raises(ModelError) as info:
         await _client(wire).generate(request_)
     assert info.value.code is ModelErrorCode.RATE_LIMITED and "9" not in str(info.value)
+
+
+# --- structured output that did not come out right -------------------------------------------
+
+
+def _bad_json(code: str = "json_validate_failed") -> httpx.Response:
+    body = {
+        "error": {
+            "code": code,
+            "type": "invalid_request_error",
+            "message": f"secret provider detail {KEY}",
+            "failed_generation": "SECRET MODEL OUTPUT the user asked about",
+        }
+    }
+    return httpx.Response(400, json=body)
+
+
+async def test_output_that_breaks_the_schema_is_an_invalid_response_not_a_bad_request(
+    request_: ModelRequest,
+) -> None:
+    # The provider reports a truncated or non-conforming structured answer as a 400. That is a
+    # bad response, which the orchestrator's repair loop can retry, not a bad request.
+    wire = Wire(_bad_json())
+    with pytest.raises(ModelError) as info:
+        await _client(wire).generate(request_)
+    assert info.value.code is ModelErrorCode.INVALID_RESPONSE
+    assert len(wire.requests) == 1  # not retried by the adapter: the caller repairs
+    assert "SECRET" not in str(info.value) and KEY not in str(info.value)
+
+
+async def test_any_other_400_is_still_a_bad_request(request_: ModelRequest) -> None:
+    with pytest.raises(ModelError) as info:
+        await _client(Wire(_bad_json("model_not_found"))).generate(request_)
+    assert info.value.code is ModelErrorCode.BAD_REQUEST
+
+
+async def test_a_400_with_an_unreadable_body_is_a_bad_request(request_: ModelRequest) -> None:
+    with pytest.raises(ModelError) as info:
+        await _client(Wire(httpx.Response(400, text="<html>nope</html>"))).generate(request_)
+    assert info.value.code is ModelErrorCode.BAD_REQUEST
