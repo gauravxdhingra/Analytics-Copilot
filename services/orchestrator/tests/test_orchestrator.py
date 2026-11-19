@@ -614,3 +614,14 @@ async def test_a_rejected_parameter_comes_back_to_the_planner_with_an_explanatio
     assert answer.status is AnswerStatus.ANSWERED
     feedback = " ".join(m.content for m in model.requests[2].messages)
     assert "real calendar date" in feedback and "YYYY-MM-DD" in feedback
+
+
+async def test_the_planned_date_field_is_sent_to_the_tool_so_the_verifier_can_check_it(
+    gateway: FakeGateway,
+) -> None:
+    gateway.queue(_allowed())
+    spec = {**COUNT_PLAN, "date_field": "value_date"}
+    orchestrator, _ = build([route(), plan(spec), narrate("There are 776.")], gateway)
+    await orchestrator.run(QUESTION, make_ctx())
+    _agent, _tool, args = gateway.calls[0]
+    assert args["date_field"] == "value_date"

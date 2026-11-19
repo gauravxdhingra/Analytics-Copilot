@@ -521,6 +521,12 @@ class _ScopeCheck:
                 money = ref.store.money_field(ref.column)
                 if money is None or isinstance(node, exp.Count):
                     continue
+                if isinstance(node, exp.Sum | exp.Avg) and isinstance(node.this, exp.Distinct):
+                    self.run.fail(
+                        "DISTINCT_MONEY",
+                        f"{ref.store.store}.{ref.column}: DISTINCT would count two equal "
+                        "payments once. Sum the rows, or count distinct keys.",
+                    )
                 window = node.find_ancestor(exp.Window)
                 split = {c for a, c in self._partition_or_group(window, groups) if a == ref.alias}
                 pinned = self._pinned(ref.alias, [money.currency_column, *money.pinned_by])
@@ -552,6 +558,10 @@ class _ScopeCheck:
     # -- dates -----------------------------------------------------------------------------------
 
     def _date_ref(self, node: exp.Expr | None) -> _Ref | None:
+        # A cast or DATE() does not change which column is being filtered, so look through it:
+        # otherwise wrapping the column would hide a closed window or the wrong date field.
+        while isinstance(node, exp.Cast | exp.TryCast | exp.TsOrDsToDate | exp.Date | exp.Paren):
+            node = node.this
         if isinstance(node, exp.Column):
             ref = self.resolve(node)
             if ref and self._is_date(ref):

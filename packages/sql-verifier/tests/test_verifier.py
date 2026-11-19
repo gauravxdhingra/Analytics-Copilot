@@ -326,3 +326,38 @@ def test_cube_and_grouping_sets_are_refused_for_the_same_reason(verifier: Verifi
     assert codes(verifier, base + "GROUP BY GROUPING SETS ((t.currency), ())", ["booked"]) == {
         "CURRENCY_MIX"
     }
+
+
+def test_summing_distinct_amounts_merges_equal_payments_and_is_refused(verifier: Verifier) -> None:
+    # Two different payments of the same amount are two payments. DISTINCT would count them once.
+    base = f"FROM {T} t WHERE t.is_current AND t.status = $1 AND t.account_id = $2"
+    for fn in ("sum", "avg"):
+        sql = f"SELECT {fn}(DISTINCT t.amount) {base}"
+        assert "DISTINCT_MONEY" in codes(verifier, sql, ["booked", "A-DE-EUR-1"]), fn
+
+
+def test_counting_distinct_keys_and_plain_sums_are_still_allowed(verifier: Verifier) -> None:
+    base = f"FROM {T} t WHERE t.is_current AND t.status = $1 AND t.account_id = $2"
+    ok = f"SELECT count(DISTINCT t.transaction_id), sum(t.amount) {base}"
+    assert codes(verifier, ok, ["booked", "A-DE-EUR-1"]) == set()
+
+
+def test_a_cast_cannot_hide_a_closed_date_window(verifier: Verifier) -> None:
+    # Wrapping the column in a cast made the date checks skip it, so a closed window passed.
+    where = BOOKED.replace("$1", "$3")
+    for wrapped in ("CAST(booking_date AS DATE)", "booking_date::date", "DATE(booking_date)"):
+        sql = f"SELECT count(*) FROM {T} WHERE {where} AND booking_date >= $1 AND {wrapped} <= $2"
+        assert codes(verifier, sql, ["2026-01-01", "2026-02-01", "booked"]) == {"DATE_INTERVAL"}, (
+            wrapped
+        )
+
+
+def test_a_cast_cannot_hide_the_wrong_date_field(verifier: Verifier) -> None:
+    sql = (
+        f"SELECT count(*) FROM {T} WHERE {BOOKED.replace('$1', '$3')} "
+        "AND CAST(booking_date AS DATE) >= $1 AND CAST(booking_date AS DATE) < $2"
+    )
+    params = ["2026-01-01", "2026-02-01", "booked"]
+    with pytest.raises(VerificationFailed) as info:
+        verifier.verify(sql, params, VerifyOptions(date_field="value_date"))
+    assert {v.code for v in info.value.violations} == {"DATE_FIELD"}

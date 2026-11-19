@@ -295,3 +295,35 @@ def test_paging_without_an_order_is_refused_because_the_pages_would_not_be_stabl
 def test_an_offset_is_bounded(bad: int) -> None:
     with pytest.raises(ValueError, match="offset"):
         _plan(offset=bad)
+
+
+def _dated(field: str | None, on: str) -> QueryPlan:
+    return _plan(
+        select=[{"column": "transactions.transaction_id"}],
+        filters=[
+            {"column": f"transactions.{on}", "op": ">=", "values": ["2026-06-01"]},
+            {"column": f"transactions.{on}", "op": "<", "values": ["2026-07-01"]},
+        ],
+        date_field=field,
+    )
+
+
+def test_the_planned_date_field_reaches_the_verifier_options() -> None:
+    query = render(_dated("value_date", "value_date"), CATALOGUE)
+    assert query.options.date_field == "value_date"
+    assert render(_dated(None, "booking_date"), CATALOGUE).options.date_field is None
+
+
+def test_filtering_a_different_date_than_the_plan_says_is_caught_by_the_verifier() -> None:
+    from copilot_sql_verifier import VerificationFailed
+
+    wrong = render(_dated("value_date", "booking_date"), CATALOGUE)
+    with pytest.raises(VerificationFailed) as info:
+        VERIFIER.verify(*_verify_args(wrong))
+    assert {v.code for v in info.value.violations} == {"DATE_FIELD"}
+    VERIFIER.verify(*_verify_args(render(_dated("value_date", "value_date"), CATALOGUE)))
+
+
+def test_an_unknown_date_field_name_is_refused_at_the_schema() -> None:
+    with pytest.raises(ValueError, match="date_field"):
+        _dated("Robert'); DROP TABLE", "booking_date")

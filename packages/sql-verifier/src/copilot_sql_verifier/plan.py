@@ -58,6 +58,9 @@ class QueryPlan(_Strict):
     offset: int = Field(default=0, ge=0, le=100_000)  # for follow-ups such as "the next 5"
     include_history: bool = False
     include_cancelled: bool = False
+    # Which date the question is about (for example booking_date for period reporting, value_date
+    # for cash positioning). Code then checks that the query really filters on it.
+    date_field: str | None = Field(default=None, pattern=r"^[a-z_]{1,40}$")
 
 
 @dataclass(frozen=True)
@@ -245,7 +248,9 @@ def render(plan: QueryPlan, catalogue: Catalogue) -> RenderedQuery:
             raise PlanError("OFFSET_NEEDS_ORDER", "paging needs an order_by")
         parts.append(f"OFFSET {plan.offset}")
     options = VerifyOptions(
-        history_requested=plan.include_history, include_cancelled=plan.include_cancelled
+        history_requested=plan.include_history,
+        include_cancelled=plan.include_cancelled,
+        date_field=plan.date_field,
     )
     return RenderedQuery(sql=" ".join(parts), params=work.params, options=options)
 

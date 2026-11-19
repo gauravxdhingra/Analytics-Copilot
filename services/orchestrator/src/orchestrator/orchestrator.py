@@ -482,6 +482,7 @@ class InsightsOrchestrator:
             "max_rows": state.plan.limit,
             "include_history": state.plan.include_history,
             "include_cancelled": state.plan.include_cancelled,
+            "date_field": state.plan.date_field,
         }
         outcome = await self._gateway.call(ctx, PLANNER_AGENT, SELECT_TOOL, args)
         counted = {"tool_calls": state.tool_calls + 1}
