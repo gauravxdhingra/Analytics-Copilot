@@ -279,4 +279,5 @@ async def test_a_result_cut_short_by_the_row_cap_says_so(pg_ledger: PostgresLedg
     assert answer.table is not None
     assert len(answer.table.rows) == 2
     assert answer.table.truncated is True
-    assert any("truncated" in caveat for caveat in answer.caveats)
+    assert any("first 2 rows" in caveat and "more" in caveat for caveat in answer.caveats)
+    assert not any("truncated" in caveat for caveat in answer.caveats)  # not alarming, just exact

@@ -477,7 +477,7 @@ class InsightsOrchestrator:
         if table.as_of:
             caveats.append(f"Data as of {table.as_of}.")
         if table.truncated:
-            caveats.append(f"The result was truncated at {table.row_count} rows.")
+            caveats.append(f"Showing the first {len(table.rows)} rows; more rows match.")
         # By default only current, booked rows count. If the plan waived either rule, the numbers
         # mean something else, and the reader has to be told rather than left to assume.
         plan = state.plan

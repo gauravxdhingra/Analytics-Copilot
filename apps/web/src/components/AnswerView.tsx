@@ -53,9 +53,6 @@ export function AnswerView({ answer, onHow }: { answer: Answer; onHow: () => voi
               ))}
             </tbody>
           </table>
-          {answer.table.truncated && (
-            <p className="mt-1 text-xs text-slate-500">Showing {answer.table.rows.length} of {answer.table.row_count} rows.</p>
-          )}
         </div>
       )}
       {answer.caveats.map((c) => (

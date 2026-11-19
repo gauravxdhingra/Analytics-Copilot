@@ -474,3 +474,13 @@ async def test_a_draft_after_untrusted_content_carries_no_model_prose(
     assert "Approve payment" not in args["summary"] and "skip" not in args["summary"]
     assert "outside the company" in args["summary"]
     assert "1 row" in args["summary"] or "row" in args["summary"]
+
+
+async def test_the_planner_is_told_how_signed_amounts_rank(gateway: FakeGateway) -> None:
+    # "Largest outflows" is a sorting question on a signed column. A model that sorts descending
+    # lists the smallest outflows first, and the answer still verifies, so it has to be told.
+    gateway.queue(_allowed())
+    orchestrator, model = build([route(), plan(), narrate("There are 776.")], gateway)
+    await orchestrator.run(QUESTION, make_ctx())
+    prompt = model.requests[1].system + " ".join(m.content for m in model.requests[1].messages)
+    assert "most negative" in prompt and "ascending" in prompt

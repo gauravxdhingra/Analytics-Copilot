@@ -37,6 +37,18 @@ describe("AnswerView", () => {
     expect(screen.queryByRole("button", { name: /how i got this/i })).toBeNull();
   });
 
+  it("says once, from the backend's caveat, that only the first rows are shown", () => {
+    const note = "Showing the first 5 rows; more rows match.";
+    const cut = {
+      ...answered,
+      caveats: [note],
+      table: { ...answered.table!, truncated: true, row_count: 5 },
+    };
+    render(<AnswerView answer={cut} onHow={() => {}} />);
+    expect(screen.getAllByText(note)).toHaveLength(1);
+    expect(screen.queryByText(/5 of 5/)).toBeNull(); // the old, self-contradicting line
+  });
+
   it("shows outside text without the wrapper tags, marked as external", () => {
     const wrapped = {
       ...answered,
