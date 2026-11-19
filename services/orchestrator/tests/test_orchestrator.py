@@ -1,9 +1,11 @@
 import asyncio
 import copy
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
 import pytest
+from copilot_memory import Preference, Turn
 from copilot_models import ModelError, ModelErrorCode, ModelResponse, ModelRole
 from orchestrator import AnswerStatus, InsightsOrchestrator, RunCaps
 from orchestrator.testing import (
@@ -499,3 +501,87 @@ async def test_fresh_rows_carry_no_reuse_note(gateway: FakeGateway) -> None:
     orchestrator, _ = build([route(), plan(), narrate("There are 776.")], gateway)
     answer = await orchestrator.run(QUESTION, make_ctx())
     assert not any("Reused" in c for c in answer.caveats)
+
+
+# --- memory: follow-ups and preferences ------------------------------------------------------
+
+
+def _earlier_turn(question: str = "Show the five largest outflows") -> Turn:
+    return Turn(
+        conversation_id="conv-0001-aaaa",
+        question=question,
+        status="answered",
+        plan={"store": "treasury.transactions", "limit": 5, "offset": 0},
+        summary="answered: 5 rows, data as of 2026-06-30",
+    )
+
+
+async def test_without_memory_nothing_about_memory_is_in_any_prompt(gateway: FakeGateway) -> None:
+    gateway.queue(_allowed())
+    orchestrator, model = build([route(), plan(), narrate("There are 776.")], gateway)
+    await orchestrator.run(QUESTION, make_ctx())
+    # The system rules name the block; what must be absent is any memory content in a message.
+    sent = " ".join(m.content for r in model.requests for m in r.messages)
+    assert 'source="memory"' not in sent
+
+
+async def test_earlier_turns_reach_the_router_and_the_planner_as_wrapped_hints(
+    gateway: FakeGateway,
+) -> None:
+    gateway.queue(_allowed())
+    orchestrator, model = build([route(), plan(), narrate("Next five.")], gateway)
+    await orchestrator.run("And the next 5?", make_ctx(), history=[_earlier_turn()])
+    router_prompt = " ".join(m.content for m in model.requests[0].messages)
+    planner_prompt = " ".join(m.content for m in model.requests[1].messages)
+    for prompt in (router_prompt, planner_prompt):
+        assert (
+            '<untrusted source="memory">' in prompt and "Show the five largest outflows" in prompt
+        )
+        assert "And the next 5?" in prompt  # the new question is still there, outside the block
+    assert '"offset"' in planner_prompt  # the plan that was run, so the next page can follow it
+
+
+async def test_a_follow_up_becomes_the_previous_plan_with_an_offset(gateway: FakeGateway) -> None:
+    follow_up = {
+        "store": "treasury.transactions",
+        "select": [{"column": "transactions.transaction_id"}, {"column": "transactions.amount"}],
+        "order_by": [{"column": "transactions.amount"}, {"column": "transactions.transaction_id"}],
+        "limit": 5,
+        "offset": 5,
+    }
+    gateway.queue(_allowed([[1, 2]]))
+    orchestrator, _ = build([route(), plan(follow_up), narrate("Next five.")], gateway)
+    answer = await orchestrator.run("And the next 5?", make_ctx(), history=[_earlier_turn()])
+    _agent, _tool, args = gateway.calls[0]
+    assert args["sql"].endswith("LIMIT 6 OFFSET 5")
+    assert answer.plan is not None and answer.plan["offset"] == 5  # recorded for the next turn
+
+
+async def test_preferences_reach_the_planner_as_hints(gateway: FakeGateway) -> None:
+    gateway.queue(_allowed())
+    now = datetime(2026, 6, 30, tzinfo=UTC)
+    pref = Preference(
+        pref_id="p",
+        kind="preference",
+        name=None,
+        text="I usually mean HAL-DE",
+        created_at=now,
+        updated_at=now,
+    )
+    orchestrator, model = build([route(), plan(), narrate("x")], gateway)
+    await orchestrator.run(QUESTION, make_ctx(), preferences=[pref])
+    planner_prompt = " ".join(m.content for m in model.requests[1].messages)
+    assert "I usually mean HAL-DE" in planner_prompt and 'source="memory"' in planner_prompt
+
+
+async def test_the_answer_records_the_plan_that_ran(gateway: FakeGateway) -> None:
+    gateway.queue(_allowed())
+    orchestrator, _ = build([route(), plan(), narrate("There are 776.")], gateway)
+    answer = await orchestrator.run(QUESTION, make_ctx())
+    assert answer.plan is not None and answer.plan["store"] == "treasury.transactions"
+
+
+async def test_the_prompts_that_changed_have_new_versions() -> None:
+    from orchestrator import prompts
+
+    assert prompts.ROUTER_VERSION != "router@1" and prompts.PLANNER_VERSION != "planner@1"

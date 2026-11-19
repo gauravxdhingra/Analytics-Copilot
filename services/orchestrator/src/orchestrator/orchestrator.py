@@ -8,12 +8,13 @@ and hard caps bound the run. A model can explain a refusal; it can never overrid
 
 import asyncio
 import json
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from contextlib import nullcontext, suppress
 from decimal import Decimal
 from typing import Any, Protocol, TypeVar
 
 from copilot_catalogue import Catalogue
+from copilot_memory import Preference, Turn
 from copilot_models import Message, ModelClient, ModelError, ModelRequest, ModelRole
 from copilot_schemas import AgentResult, Claim, Evidence
 from copilot_sql_verifier import PlanError, QueryPlan, RenderedQuery, render
@@ -26,6 +27,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from orchestrator import prompts
 from orchestrator.answer import Answer, AnswerStatus, AnswerTable, Usage
 from orchestrator.caps import RunCaps
+from orchestrator.memory_context import render_memory
 from orchestrator.narrative import numbers_are_grounded, template_text
 from orchestrator.schemas import NarrativeOut, PlanOut, Route
 
@@ -53,6 +55,8 @@ class _State(BaseModel):
 
     question: str
     run_id: str = "run"
+    memory: str = ""  # rendered memory for the planner: earlier turns and saved preferences
+    router_memory: str = ""  # the same, limited to the last two turns
     attempts: int = 0
     feedback: list[str] = Field(default_factory=list)
     plan: QueryPlan | None = None
@@ -76,6 +80,12 @@ class _State(BaseModel):
     steps: list[str] = Field(default_factory=list)
     models: list[str] = Field(default_factory=list)
     answer: Answer | None = None
+
+
+def _with_memory(memory: str, question: str, *, labelled: bool = True) -> str:
+    """The question, preceded by remembered context when there is any."""
+    asked = f"Question: {question}" if labelled or memory else question
+    return f"{memory}\n\n{asked}" if memory else asked
 
 
 class _Asked(BaseModel):
@@ -121,9 +131,21 @@ class InsightsOrchestrator:
 
     # -- public --
 
-    async def run(self, question: str, ctx: RunContext, progress: Progress | None = None) -> Answer:
+    async def run(
+        self,
+        question: str,
+        ctx: RunContext,
+        progress: Progress | None = None,
+        *,
+        history: Sequence[Turn] = (),
+        preferences: Sequence[Preference] = (),
+    ) -> Answer:
+        memory = (
+            render_memory(history, preferences),
+            render_memory(list(history)[-2:], preferences),
+        )
         if self._tracing is None:
-            return await self._run(question, ctx, progress)
+            return await self._run(question, ctx, progress, memory)
         versions = {
             **self._versions,
             "catalogue": self._catalogue.version,
@@ -139,7 +161,7 @@ class InsightsOrchestrator:
             versions=versions,
         ) as info:
             ctx.trace_id = info.trace_id  # ledger rows and spans share one id
-            answer = await self._run(question, ctx, progress)
+            answer = await self._run(question, ctx, progress, memory)
             self._tracing.annotate(
                 **{
                     "copilot.outcome": answer.status.value,
@@ -151,13 +173,22 @@ class InsightsOrchestrator:
         return answer.model_copy(update={"trace_id": info.trace_id})
 
     async def _run(
-        self, question: str, ctx: RunContext, progress: Progress | None = None
+        self,
+        question: str,
+        ctx: RunContext,
+        progress: Progress | None = None,
+        memory: tuple[str, str] = ("", ""),
     ) -> Answer:
         graph = self._build(ctx, progress)
         try:
             async with asyncio.timeout(self._caps.max_wall_clock_s):
                 result = await graph.ainvoke(
-                    _State(question=question, run_id=ctx.run_id),
+                    _State(
+                        question=question,
+                        run_id=ctx.run_id,
+                        memory=memory[0],
+                        router_memory=memory[1],
+                    ),
                     config={"recursion_limit": self._caps.recursion_limit()},
                 )
         except TimeoutError:
@@ -317,7 +348,7 @@ class InsightsOrchestrator:
             ModelRole.ROUTER,
             prompts.ROUTER_VERSION,
             prompts.ROUTER_SYSTEM,
-            state.question,
+            _with_memory(state.router_memory, state.question, labelled=False),
             Route,
             0.1,
         )
@@ -361,7 +392,7 @@ class InsightsOrchestrator:
 
     async def _plan(self, state: _State) -> dict[str, Any]:
         attempts = state.attempts + 1
-        user = f"Question: {state.question}"
+        user = _with_memory(state.memory, state.question)
         if state.feedback:
             reasons = "\n".join(f"- {f}" for f in state.feedback[-3:])
             user += f"\n\nYour previous plan was rejected:\n{reasons}\nReturn a corrected plan."
@@ -675,6 +706,7 @@ class InsightsOrchestrator:
             table=state.table,
             sql=state.rendered.sql,
             params=state.rendered.params,
+            plan=state.plan.model_dump(mode="json") if state.plan else None,
             caveats=state.caveats,
             agent_result=result,
             **common,

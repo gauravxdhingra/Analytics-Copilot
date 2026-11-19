@@ -35,6 +35,7 @@ class Answer(BaseModel):
     table: AnswerTable | None = None
     sql: str | None = None
     params: list[Any] = Field(default_factory=list)
+    plan: dict[str, Any] | None = None  # the query plan that ran, kept so a follow-up can reuse it
     refusal_reason: str | None = None  # a mapped code, never raw error text
     clarification: str | None = None
     caveats: list[str] = Field(default_factory=list)

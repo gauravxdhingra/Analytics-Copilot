@@ -9,7 +9,7 @@ from opentelemetry.sdk.trace import ReadableSpan, TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.trace import StatusCode
-from orchestrator import AnswerStatus, InsightsOrchestrator
+from orchestrator import AnswerStatus, InsightsOrchestrator, prompts
 from orchestrator.testing import (
     CATALOGUE,
     FakeGateway,
@@ -88,7 +88,11 @@ async def test_model_spans_nest_under_their_node_and_carry_counts_not_text(
         assert (
             attrs["gen_ai.usage.input_tokens"] == 100 and attrs["gen_ai.usage.output_tokens"] == 20
         )
-        assert str(attrs["copilot.prompt.template_id"]).endswith("@1")
+        assert attrs["copilot.prompt.template_id"] in {
+            prompts.ROUTER_VERSION,
+            prompts.PLANNER_VERSION,
+            prompts.NARRATIVE_VERSION,
+        }
     roles = {
         dict(s.attributes or {})["copilot.model.role"] for s in _by_name(exporter, "gen_ai.chat")
     }
