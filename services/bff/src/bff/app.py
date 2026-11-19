@@ -13,11 +13,12 @@ import re
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from urllib.parse import urlencode
 
 import httpx
 from copilot_auth import AuthError, TokenValidator
+from copilot_memory import MemoryFailure, MemoryStore, Owner, Preference
 from fastapi import Depends, FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
@@ -44,6 +45,8 @@ _STATUS = {
     "BAD_REQUEST": 422,
     "LOGIN_FAILED": 400,
     "UNAVAILABLE": 503,
+    "INVALID_MEMORY": 422,
+    "MEMORY_LIMIT": 409,
 }
 _SAFE_SPAN_ATTRIBUTES = {
     "copilot.node",
@@ -84,6 +87,7 @@ class BffDeps:
     copilot: CopilotApi
     approvals: httpx.AsyncClient
     jaeger: httpx.AsyncClient | None = None
+    memory: MemoryStore | None = None  # the user's history and saved memory
     clock: Callable[[], datetime] = lambda: datetime.now(UTC)
 
 
@@ -91,6 +95,15 @@ class AskRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     question: str = Field(min_length=1)
+    conversation_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{8,64}$")
+
+
+class MemoryItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["preference", "saved_definition"]
+    name: str | None = Field(default=None, max_length=60)
+    text: str = Field(min_length=1, max_length=600)
 
 
 class DecisionBody(BaseModel):
@@ -346,12 +359,14 @@ def create_app(deps: BffDeps, lifespan: Any = None) -> FastAPI:
                 )
             )
         return StreamingResponse(
-            _stream(session, body.question),
+            _stream(session, body.question, body.conversation_id),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
         )
 
-    async def _stream(session: Session, question: str) -> AsyncIterator[str]:
+    async def _stream(
+        session: Session, question: str, conversation_id: str | None
+    ) -> AsyncIterator[str]:
         queue: asyncio.Queue[tuple[str, dict[str, Any]] | None] = asyncio.Queue()
 
         async def progress(step: str) -> None:
@@ -359,7 +374,7 @@ def create_app(deps: BffDeps, lifespan: Any = None) -> FastAPI:
 
         async def work() -> None:
             try:
-                answer = await deps.copilot.ask(session, question, progress)
+                answer = await deps.copilot.ask(session, question, progress, conversation_id)
                 await queue.put(("answer", answer))
             except CopilotError as exc:
                 await queue.put(("error", {"error_code": "UNAVAILABLE", "reason": exc.code}))
@@ -440,6 +455,105 @@ def create_app(deps: BffDeps, lifespan: Any = None) -> FastAPI:
         return await approval_call(
             session, "POST", f"/v1/drafts/{draft_id}/decision", body.model_dump()
         )
+
+    # -- the user's own history and saved memory -------------------------------------------------
+
+    def _memory_store() -> MemoryStore:
+        if deps.memory is None:
+            raise _Refused(_error("UNAVAILABLE"))
+        return deps.memory
+
+    def _owner(session: Session) -> Owner:
+        return Owner(tenant_id=session.tenant_id, user_id=session.subject)
+
+    def _memory_error(exc: MemoryFailure) -> _Refused:
+        mapped = {
+            "INVALID_TEXT": "INVALID_MEMORY",
+            "INVALID_NAME": "INVALID_MEMORY",
+            "LIMIT_REACHED": "MEMORY_LIMIT",
+        }.get(exc.code, "UNAVAILABLE")
+        return _Refused(_error(mapped))  # a code only: what was refused is never echoed
+
+    @app.get("/api/history")
+    async def history(session: Authed) -> dict[str, Any]:
+        store = _memory_store()
+        try:
+            turns = await asyncio.to_thread(store.history, _owner(session), 50)
+        except MemoryFailure as exc:
+            raise _memory_error(exc) from None
+        return {
+            "turns": [
+                {
+                    "conversation_id": t.conversation_id,
+                    "question": t.question,
+                    "status": t.status,
+                    "summary": t.summary,
+                    "trace_id": t.trace_id,
+                    "created_at": t.created_at,
+                }
+                for t in turns
+            ]
+        }
+
+    @app.delete("/api/history")
+    async def clear_history(request: Request, session: Authed) -> dict[str, int]:
+        require_csrf(request, session)
+        store = _memory_store()
+        try:
+            return {"deleted": await asyncio.to_thread(store.clear_history, _owner(session))}
+        except MemoryFailure as exc:
+            raise _memory_error(exc) from None
+
+    def _item(p: Preference) -> dict[str, Any]:
+        return {
+            "pref_id": p.pref_id,
+            "kind": p.kind,
+            "name": p.name,
+            "text": p.text,
+            "created_at": p.created_at,
+        }
+
+    @app.get("/api/memory")
+    async def memory_list(session: Authed) -> dict[str, Any]:
+        store = _memory_store()
+        try:
+            items = await asyncio.to_thread(store.list_preferences, _owner(session))
+        except MemoryFailure as exc:
+            raise _memory_error(exc) from None
+        return {"items": [_item(p) for p in items]}
+
+    @app.post("/api/memory", status_code=201)
+    async def memory_add(body: MemoryItem, request: Request, session: Authed) -> dict[str, Any]:
+        require_csrf(request, session)
+        store = _memory_store()
+        try:
+            made = await asyncio.to_thread(
+                store.add_preference, _owner(session), body.kind, body.name, body.text
+            )
+        except MemoryFailure as exc:
+            raise _memory_error(exc) from None
+        return {"item": _item(made)}
+
+    @app.delete("/api/memory/{pref_id}")
+    async def memory_delete(pref_id: str, request: Request, session: Authed) -> dict[str, bool]:
+        require_csrf(request, session)
+        store = _memory_store()
+        try:
+            found = await asyncio.to_thread(store.delete_preference, _owner(session), pref_id)
+        except MemoryFailure as exc:
+            raise _memory_error(exc) from None
+        if not found:
+            raise _Refused(_error("NOT_FOUND"))  # someone else's item looks like none at all
+        return {"deleted": True}
+
+    @app.delete("/api/memory")
+    async def memory_clear(request: Request, session: Authed) -> dict[str, int]:
+        require_csrf(request, session)
+        store = _memory_store()
+        try:
+            return {"deleted": await asyncio.to_thread(store.clear_preferences, _owner(session))}
+        except MemoryFailure as exc:
+            raise _memory_error(exc) from None
 
     # -- "how I got this": the user's own trace -------------------------------------------------
 

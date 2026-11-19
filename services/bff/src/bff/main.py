@@ -5,6 +5,7 @@ IdP, the approval service and the trace backend over HTTP. With no model key con
 returns a mapped error and everything else (login, drafts, approvals) still works.
 """
 
+import logging
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -12,6 +13,7 @@ from typing import Any
 
 import httpx
 from copilot_auth import JwksKeyProvider, TokenValidator
+from copilot_memory import InMemoryMemoryStore, MemoryStore, PostgresMemoryStore
 from copilot_tracing import Tracing, configure_tracing
 from fastapi import FastAPI
 from orchestrator import InsightsOrchestrator
@@ -47,11 +49,25 @@ class _Late:
         return await self._ready().submit_draft(*args)
 
 
+_log = logging.getLogger("bff")
+
+
+def _memory_store(env: dict[str, str]) -> MemoryStore:
+    """Postgres when its password is set; otherwise memory lasts only as long as this process."""
+    password = env.get("MEMORY_DB_PASSWORD")
+    if not password:
+        _log.warning("MEMORY_DB_PASSWORD not set: history and saved memory will not persist")
+        return InMemoryMemoryStore()
+    host = env.get("POSTGRES_HOST", "localhost:5433")
+    return PostgresMemoryStore(f"postgresql://copilot_memory:{password}@{host}/analytics")
+
+
 def build_app(env: dict[str, str] | None = None) -> FastAPI:
     env = dict(os.environ) if env is None else env
     config = BffConfig.from_env(env)
     jwks = JwksKeyProvider(f"{config.back_issuer}/protocol/openid-connect/certs")
     late = _Late()
+    memory = _memory_store(env)
     host = env.get("POSTGRES_HOST", "localhost:5433")
     tracing = Tracing(
         configure_tracing(
@@ -80,6 +96,7 @@ def build_app(env: dict[str, str] | None = None) -> FastAPI:
         jaeger=httpx.AsyncClient(
             base_url=env.get("JAEGER_URL", "http://localhost:16686"), timeout=5.0
         ),
+        memory=memory,
     )
 
     @asynccontextmanager
@@ -100,6 +117,7 @@ def build_app(env: dict[str, str] | None = None) -> FastAPI:
                 stack.gateway,
                 deps.broker,
                 TokenValidator(issuer=config.issuer, audience="mcp-analytics", keys=jwks),
+                memory=memory,
             )
             yield
 

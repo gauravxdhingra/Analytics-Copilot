@@ -19,6 +19,7 @@ from bff.testing import (
     jaeger_transport,
 )
 from copilot_auth import TokenValidator
+from copilot_memory import InMemoryMemoryStore
 from fastapi import FastAPI
 
 
@@ -43,6 +44,11 @@ def copilot() -> FakeCopilot:
 
 
 @pytest.fixture
+def memory() -> InMemoryMemoryStore:
+    return InMemoryMemoryStore()
+
+
+@pytest.fixture
 def approval_calls() -> list[httpx.Request]:
     return []
 
@@ -59,6 +65,7 @@ def make_app(
     broker: FakeBroker,
     copilot: FakeCopilot,
     approval_calls: list[httpx.Request],
+    memory: InMemoryMemoryStore,
 ) -> Callable[..., FastAPI]:
     def build(config: BffConfig | None = None, **overrides: Any) -> FastAPI:
         cfg = config or BffConfig(
@@ -88,6 +95,7 @@ def make_app(
             jaeger=httpx.AsyncClient(
                 transport=jaeger_transport(TRACE, "sub-ana"), base_url="http://jaeger"
             ),
+            memory=memory,
             clock=clock.now,
         )
         for key, value in overrides.items():

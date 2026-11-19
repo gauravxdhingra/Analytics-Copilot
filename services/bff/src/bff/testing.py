@@ -171,11 +171,19 @@ class FakeBroker:
 class FakeCopilot:
     def __init__(self) -> None:
         self.asked: list[tuple[str, str]] = []
+        self.conversations: list[str | None] = []
         self.drafts: list[dict[str, Any]] = [{"draft_id": DRAFT, "status": "draft"}]
         self.fail_with: Exception | None = None
 
-    async def ask(self, session: Session, question: str, progress: Any) -> dict[str, Any]:
+    async def ask(
+        self,
+        session: Session,
+        question: str,
+        progress: Any,
+        conversation_id: str | None = None,
+    ) -> dict[str, Any]:
         self.asked.append((session.subject, question))
+        self.conversations.append(conversation_id)
         if self.fail_with:
             raise self.fail_with
         for step in ("route", "plan", "execute", "narrate"):
