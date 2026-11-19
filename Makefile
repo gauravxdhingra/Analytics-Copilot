@@ -1,4 +1,4 @@
-.PHONY: demo logs e2e web-install web-typecheck web-test web-dev lint typecheck test test-integration fmt up down eval eval-baseline eval-copilot seed env
+.PHONY: clone-check demo logs e2e web-install web-typecheck web-test web-dev lint typecheck test test-integration fmt up down eval eval-baseline eval-copilot seed env
 
 lint:
 	uv run ruff check .
@@ -85,3 +85,8 @@ web-dev:
 # compose stack up. Installs nothing: run `npx playwright install chromium` once beforehand.
 e2e:
 	set -a && . deploy/compose/.env && set +a && cd apps/web && npx playwright test
+
+# Prove the quickstart on a fresh clone of the committed code, as a separate compose project.
+# Stop any running stack first (make down). Uses the canned model: no provider calls.
+clone-check:
+	./scripts/clone_check.sh
