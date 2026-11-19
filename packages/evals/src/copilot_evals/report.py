@@ -35,6 +35,7 @@ class EvalReport:
     output_tokens: int
     cost_usd: Decimal | None
     failures: list[str] = field(default_factory=list)
+    items_evaluated: int = 0  # questions the agent was asked; the denominator for cost
 
     def to_json(self) -> str:
         def encode(value: Any) -> Any:
@@ -123,4 +124,5 @@ def build_report(
         output_tokens=sum(a.output_tokens for _, a in insights),
         cost_usd=sum(costs, Decimal(0)) if costs else None,
         failures=[r.item_id for r in results if not r.passed],
+        items_evaluated=len(insights),
     )

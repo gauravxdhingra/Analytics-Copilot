@@ -110,3 +110,51 @@ def test_gates_load_from_yaml_and_reject_unknown_keys(tmp_path) -> None:  # type
     except ValueError:
         return
     raise AssertionError("a misspelled gate must not be silently ignored")
+
+
+# --- cost per question and regression (V2-1, ADR 0006) -----------------------------------------
+
+
+def _priced(cost: str) -> AgentAnswer:
+    from decimal import Decimal
+
+    return AgentAnswer(sql="x", rows=[["1"]], latency_ms=100, cost_usd=Decimal(cost))
+
+
+def test_cost_per_question_is_total_cost_over_questions_asked() -> None:
+    report = _report([(_item(n), _priced("0.001")) for n in range(1, 5)])
+    assert report.items_evaluated == 4
+    over = evaluate_gates(report, Gates(cost_per_question_usd_max=0.0005))
+    assert [g.name for g in over] == ["cost_per_question"] and not over[0].passed
+    under = evaluate_gates(report, Gates(cost_per_question_usd_max=0.002))
+    assert under[0].passed
+
+
+def test_cost_gate_is_not_applicable_without_cost_data() -> None:
+    report = _report([(_item(1), GOOD)])  # an agent that reports no cost
+    result = evaluate_gates(report, Gates(cost_per_question_usd_max=0.01))[0]
+    assert result.passed and not result.applicable  # never a silent pass: it says so
+
+
+def _pair(n_good: int, n_bad: int) -> list[tuple[GoldItem, AgentAnswer]]:
+    items = [(_item(i), GOOD) for i in range(1, n_good + 1)]
+    return items + [(_item(n_good + j), BAD) for j in range(1, n_bad + 1)]
+
+
+def test_a_drop_of_more_than_two_points_against_the_last_report_fails() -> None:
+    report = _report(_pair(48, 2))  # 96%
+    gates = Gates(execution_accuracy_max_drop=0.02)
+    worse = evaluate_gates(report, gates, previous_execution_accuracy=1.0)[0]
+    assert worse.name == "execution_accuracy_regression" and not worse.passed
+
+
+def test_a_drop_of_exactly_two_points_or_an_improvement_passes() -> None:
+    gates = Gates(execution_accuracy_max_drop=0.02)
+    exactly = evaluate_gates(_report(_pair(49, 1)), gates, previous_execution_accuracy=1.0)[0]
+    better = evaluate_gates(_report(_pair(50, 0)), gates, previous_execution_accuracy=0.9)[0]
+    assert exactly.passed and better.passed
+
+
+def test_the_regression_gate_says_when_there_is_nothing_to_compare_with() -> None:
+    result = evaluate_gates(_report(_pair(5, 0)), Gates(execution_accuracy_max_drop=0.02))[0]
+    assert result.passed and not result.applicable

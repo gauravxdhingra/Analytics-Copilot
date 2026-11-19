@@ -160,3 +160,17 @@ async def test_the_adapter_maps_each_orchestrator_outcome_for_the_scorer(item: G
     failed = Answer(status=AnswerStatus.FAILED, refusal_reason="budget")
     result = await OrchestratorAgent(Fixed(failed), ctx).answer(item)
     assert result.error_code == "budget" and result.rows is None
+
+
+def test_the_last_accepted_report_supplies_the_regression_baseline(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    import json
+
+    from eval_sets.run import previous_execution_accuracy
+
+    assert previous_execution_accuracy("copilot", tmp_path) is None  # nothing accepted yet
+    (tmp_path / "copilot.json").write_text(
+        json.dumps({"metrics": {"execution_accuracy": {"successes": 21, "total": 25}}})
+    )
+    assert previous_execution_accuracy("copilot", tmp_path) == 0.84
+    (tmp_path / "copilot.json").write_text("not json")
+    assert previous_execution_accuracy("copilot", tmp_path) is None  # unreadable: say nothing

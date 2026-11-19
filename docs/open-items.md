@@ -8,7 +8,7 @@ Files: **PS** = [Analytics Copilot.md](../Analytics%20Copilot.md), **ARCH** = [A
 
 | Where | Question | Needed by |
 |---|---|---|
-| PS:80 | Per-question cost budget (KPI and release gate) | S2 baselines, S4 |
+| PS:80 | Per-question cost budget (KPI and release gate). Proposed at $0.01 in [ADR 0006](adr/0006-release-gates-and-budgets.md), awaiting acceptance | S2 baselines, S4 |
 | PS:178 | Final name of the fictional company (working name Halcyon Group; D1 says provisional) | S1 |
 | PS:408 | Semantic-layer export target: dbt MetricFlow or Cube | S4 |
 | PS:890 | Supported UI languages | S4 (also affects intent training data and language-ID rail) |

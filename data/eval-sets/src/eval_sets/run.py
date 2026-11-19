@@ -2,6 +2,7 @@
 
 import argparse
 import asyncio
+import json
 import os
 import sys
 from pathlib import Path
@@ -32,6 +33,17 @@ DATA_DIR = DATA_FILE.parent
 GATES_FILE = DATA_DIR / "gates.yaml"
 CASSETTE = DATA_DIR / "cassettes" / "naive_baseline_v0.json"
 AGENT_CASSETTE = DATA_DIR / "cassettes" / "copilot_v0.json"
+ACCEPTED_DIR = DATA_DIR / "accepted"  # the last report a human accepted: the regression baseline
+
+
+def previous_execution_accuracy(agent: str, directory: Path = ACCEPTED_DIR) -> float | None:
+    """Execution accuracy in the last accepted report for this agent, or None if there is none."""
+    path = directory / f"{agent}.json"
+    try:
+        found = json.loads(path.read_text())["metrics"]["execution_accuracy"]
+        return float(found["successes"]) / float(found["total"])
+    except (OSError, ValueError, KeyError, TypeError, ZeroDivisionError):
+        return None
 
 
 def _settings() -> Settings:
@@ -153,7 +165,11 @@ async def _copilot(mode: str, out: Path | None, enforce: bool) -> int:
 
         agent = OrchestratorAgent(orchestrator, context_for)
         report, _, _ = await run_agent(gold, agent, seed=1)
-    gates = evaluate_gates(report, Gates.from_yaml(GATES_FILE))
+    gates = evaluate_gates(
+        report,
+        Gates.from_yaml(GATES_FILE),
+        previous_execution_accuracy=previous_execution_accuracy("copilot"),
+    )
     if out:
         out.mkdir(parents=True, exist_ok=True)
         (out / "copilot.json").write_text(report.to_json())

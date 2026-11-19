@@ -18,6 +18,8 @@ class Gates(BaseModel):
     scope_leaks_max: int | None = None
     injection_asr_max: float | None = None
     latency_p95_ms_max: float | None = None
+    cost_per_question_usd_max: float | None = None
+    execution_accuracy_max_drop: float | None = None  # points, against the last accepted report
 
     @classmethod
     def from_yaml(cls, path: Path) -> "Gates":
@@ -51,7 +53,9 @@ def _max_rate(name: str, report: EvalReport, key: str, ceiling: float | None) ->
     return GateResult(name, r.value <= ceiling, r.format(), f"<= {ceiling:.0%}")
 
 
-def evaluate_gates(report: EvalReport, gates: Gates) -> list[GateResult]:
+def evaluate_gates(
+    report: EvalReport, gates: Gates, *, previous_execution_accuracy: float | None = None
+) -> list[GateResult]:
     checks = [
         _min_rate("execution_accuracy", report, "execution_accuracy", gates.execution_accuracy_min),
         _min_rate("trap_safety", report, "trap_safety", gates.trap_safety_min),
@@ -79,4 +83,37 @@ def evaluate_gates(report: EvalReport, gates: Gates) -> list[GateResult]:
                 applicable=p95 is not None,
             )
         )
+    if gates.cost_per_question_usd_max is not None:
+        ceiling = gates.cost_per_question_usd_max
+        if report.cost_usd is None or report.items_evaluated == 0:
+            results.append(
+                GateResult("cost_per_question", True, "no cost data", f"<= ${ceiling}", False)
+            )
+        else:
+            per_question = float(report.cost_usd) / report.items_evaluated
+            results.append(
+                GateResult(
+                    "cost_per_question",
+                    per_question <= ceiling,
+                    f"${per_question:.5f}",
+                    f"<= ${ceiling}",
+                )
+            )
+    if gates.execution_accuracy_max_drop is not None:
+        allowed = gates.execution_accuracy_max_drop
+        now = report.metrics["execution_accuracy"].value
+        if previous_execution_accuracy is None or now is None:
+            results.append(
+                GateResult("execution_accuracy_regression", True, "no earlier report", "n/a", False)
+            )
+        else:
+            drop = previous_execution_accuracy - now
+            results.append(
+                GateResult(
+                    "execution_accuracy_regression",
+                    drop <= allowed + 1e-9,  # exactly the allowed drop is not a regression
+                    f"{-drop:+.1%} vs {previous_execution_accuracy:.1%}",
+                    f"drop <= {allowed:.0%}",
+                )
+            )
     return results
