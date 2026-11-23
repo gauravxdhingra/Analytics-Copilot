@@ -54,14 +54,30 @@ _PATHS: dict[str, list[tuple[str, str, str]]] = {
     ],
     "approval-service": [("copilot-bff", "BFF_CLIENT_SECRET", "approval-service")],
 }
-_CACHE: dict[tuple[str, str], str] = {}
+_CACHE: dict[tuple[str, str], tuple[str, float]] = {}  # token and its exp, in epoch seconds
+# Access tokens live about five minutes and an eval run can outlast that, so a cached token is
+# dropped shortly before it expires rather than at the moment it does.
+REFRESH_MARGIN_SECONDS = 30
+
+
+def _now() -> float:
+    return datetime.now(UTC).timestamp()
 
 
 async def keycloak_token_for(username: str, *, audience: str = "query-api") -> str:
     """A real token for a demo user addressed to `audience`, via the real exchange chain."""
     key = (username, audience)
-    if key in _CACHE:
-        return _CACHE[key]
+    cached = _CACHE.get(key)
+    if cached is not None and cached[1] - _now() > REFRESH_MARGIN_SECONDS:
+        return cached[0]
+    token = await _fetch(username, audience)
+    # The signature is not checked here: this only reads the expiry of a token we just received.
+    expires = jwt.decode(token, options={"verify_signature": False})["exp"]
+    _CACHE[key] = (token, float(expires))
+    return token
+
+
+async def _fetch(username: str, audience: str) -> str:
     base = os.environ.get("KEYCLOAK_URL", "http://localhost:8081")
     token_url = f"{base}/realms/halcyon/protocol/openid-connect/token"
     async with httpx.AsyncClient(timeout=5.0) as http:
@@ -85,5 +101,4 @@ async def keycloak_token_for(username: str, *, audience: str = "query-api") -> s
             timeout_seconds=5.0,
         )
         token = await exchanger.exchange(token, hop_audience)
-    _CACHE[key] = token
     return token

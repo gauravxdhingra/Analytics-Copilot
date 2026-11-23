@@ -488,6 +488,25 @@ async def test_the_planner_is_told_how_signed_amounts_rank(gateway: FakeGateway)
     assert "most negative" in prompt and "ascending" in prompt
 
 
+async def test_the_planner_is_told_to_report_outflow_amounts_as_positive(
+    gateway: FakeGateway,
+) -> None:
+    gateway.queue(_allowed())
+    orchestrator, model = build([route(), plan(), narrate("There are 776.")], gateway)
+    await orchestrator.run(QUESTION, make_ctx())
+    assert "negate" in model.requests[1].system
+
+
+async def test_the_planner_is_told_to_select_only_what_was_asked_and_to_round_in_code(
+    gateway: FakeGateway,
+) -> None:
+    gateway.queue(_allowed())
+    orchestrator, model = build([route(), plan(), narrate("There are 776.")], gateway)
+    await orchestrator.run(QUESTION, make_ctx())
+    system = model.requests[1].system
+    assert "only the columns" in system and "`round`" in system
+
+
 async def test_reused_rows_are_disclosed_in_the_answer(gateway: FakeGateway) -> None:
     gateway.queue(_allowed(cached=True))
     orchestrator, _ = build([route(), plan(), narrate("There are 776.")], gateway)

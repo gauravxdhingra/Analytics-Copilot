@@ -38,9 +38,11 @@ class GroqSettings:
     default_model: str = DEFAULT_MODEL
     fallback_model: str | None = None
     base_url: str = DEFAULT_BASE_URL
+    trust_env: bool = True
     # Reasoning tokens are billed as output, so keep them low: this work is plain extraction
     # and planning over a small schema, not open-ended thinking.
-    reasoning_effort: str = "low"
+    # None leaves the field out for OpenAI-compatible gateways that do not accept it.
+    reasoning_effort: str | None = "low"
     max_attempts: int = 3
     base_delay_seconds: float = 0.5
     max_delay_seconds: float = 4.0
@@ -166,7 +168,7 @@ class GroqClient:
         if not settings.api_key:
             raise ModelError(ModelErrorCode.AUTH)  # fail closed: no key, no model
         self._settings = settings
-        self._http = http or httpx.AsyncClient()
+        self._http = http or httpx.AsyncClient(trust_env=settings.trust_env)
         self._sleep = sleep
         self._jitter = jitter
         self._pacer = _Pacer(clock)
@@ -243,8 +245,9 @@ class GroqClient:
             ],
             "temperature": request.temperature,
             "max_completion_tokens": request.max_output_tokens,
-            "reasoning_effort": self._settings.reasoning_effort,
         }
+        if self._settings.reasoning_effort:
+            body["reasoning_effort"] = self._settings.reasoning_effort
         if request.output_schema:
             body["response_format"] = {
                 "type": "json_schema",

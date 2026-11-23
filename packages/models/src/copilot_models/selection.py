@@ -1,7 +1,7 @@
 """Choose a live model provider from the environment. Shared by the app and the eval harness.
 
-MODEL_PROVIDER (groq or gemini) names one. With none named, whichever provider has a key is used,
-cheapest first. A provider that was named but has no key does not fall back to another one: nothing
+MODEL_PROVIDER (groq, gemini or litellm) names one. With none named, whichever provider has a key
+is used, with the gateway last. An incomplete named provider does not fall back, so nothing
 spends money that was not asked for. Returns None when nothing is usable; the caller fails closed.
 """
 
@@ -17,10 +17,18 @@ def select_live_model(env: Mapping[str, str]) -> ModelClient | None:
     def given(name: str) -> str:
         return env.get(name) or ""  # a blank line in an .env template counts as unset
 
+    gateway = bool(given("LITELLM_API_KEY") and given("LITELLM_BASE_URL") and given("MODEL"))
     keyed = [
         name for name, var in (("groq", "GROQ_API_KEY"), ("gemini", "GEMINI_API_KEY")) if given(var)
-    ]
+    ] + (["litellm"] if gateway else [])
     provider = given("MODEL_PROVIDER").lower() or (keyed[0] if keyed else "")
+    if provider == "litellm" and gateway:
+        from copilot_models.adapters.groq import GroqClient
+        from copilot_models.adapters.litellm import litellm_settings
+
+        settings = litellm_settings(env)
+        _log.info("model provider: litellm (%s)", settings.default_model)
+        return GroqClient(settings)
     if provider == "groq" and given("GROQ_API_KEY"):
         from copilot_models.adapters.groq import GroqClient, GroqSettings
 

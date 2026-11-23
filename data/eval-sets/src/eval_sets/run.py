@@ -194,6 +194,9 @@ def main(argv: list[str] | None = None) -> int:
     copilot.add_argument("--out", type=Path)
     copilot.add_argument("--enforce", action="store_true")
     args = parser.parse_args(argv)
+    if sys.platform == "win32":
+        # psycopg's async mode cannot run on the default Windows (Proactor) event loop.
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     if args.command == "copilot":
         return asyncio.run(_copilot(args.mode, args.out, args.enforce))
     if args.command == "calibrate":

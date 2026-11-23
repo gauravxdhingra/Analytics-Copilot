@@ -3,7 +3,7 @@
 from copilot_catalogue import Catalogue
 
 ROUTER_VERSION = "router@2"
-PLANNER_VERSION = "planner@2"
+PLANNER_VERSION = "planner@4"
 NARRATIVE_VERSION = "narrative@1"
 
 ROUTER_SYSTEM = """You route one question from a treasury user.
@@ -55,6 +55,14 @@ def planner_system(catalogue: Catalogue) -> str:
         "  with the same filters and order, and set offset to the earlier offset plus its limit.",
         "  Paging needs an order_by.",
         "- Ranking a signed column: the largest outflows are the most negative amounts.",
+        "- Outflows are stored as negative amounts. When the question asks how much was paid, or",
+        "  the total or size of outflows, set `negate: true` on that amount so the answer is a",
+        "  positive figure, and keep the filter that selects outflows. Never negate inflows or",
+        "  balances.",
+        "- Select only the columns the question asks for. Do not add context columns such as the",
+        "  account, currency or date; code adds a currency column itself when money needs one.",
+        "- When the question asks to round a figure, set `round` to the number of decimals on that",
+        "  amount. Never round or compute a figure yourself.",
         "- If the question cannot be answered from these stores, set `decline` with a reason.",
         "  If it is missing something essential, set `clarify` with one short question.",
         "Return JSON only.",

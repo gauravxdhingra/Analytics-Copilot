@@ -35,6 +35,11 @@ class SelectItem(_Strict):
     column: str  # "alias.column", where the alias is the table name
     agg: Literal["sum", "avg", "min", "max", "count", "count_distinct"] | None = None
     alias: str | None = Field(default=None, pattern=_IDENT)
+    # Flips the sign of a money figure, so outflows (stored as negative amounts) can be answered
+    # as the positive amount people ask about. Code does the arithmetic, never the model.
+    negate: bool = False
+    # Rounds a money figure to this many decimals in the database, so the model never rounds.
+    round: int | None = Field(default=None, ge=0, le=6)
 
 
 class PlanFilter(_Strict):
@@ -74,6 +79,7 @@ class _Render:
     def __init__(self, plan: QueryPlan, catalogue: Catalogue) -> None:
         self.plan = plan
         self.catalogue = catalogue
+        self.primary: Store
         self.params: list[Any] = []
         self.scope: dict[str, Store] = {}
         self.joins: list[tuple[str, str, str]] = []  # (alias, alias, cardinality) both directions
@@ -85,10 +91,21 @@ class _Render:
 
     # -- scope and columns -----------------------------------------------------------------------
 
+    def resolve_store(self) -> Store:
+        """The planned store by its full name, or by its table alias when that is unambiguous.
+        Models often write the alias the catalogue prints beside each store."""
+        name = self.plan.store
+        found = self.catalogue.stores.get(name)
+        if found is None:
+            matches = [s for s in self.catalogue.stores.values() if s.table == name]
+            found = matches[0] if len(matches) == 1 else None
+        if found is None:
+            raise PlanError("UNKNOWN_STORE", name)
+        return found
+
     def build_scope(self) -> None:
-        primary = self.catalogue.stores.get(self.plan.store)
-        if primary is None:
-            raise PlanError("UNKNOWN_STORE", self.plan.store)
+        primary = self.resolve_store()
+        self.primary = primary
         self.scope[primary.table] = primary
         for name in self.plan.joins:
             found = None
@@ -130,6 +147,7 @@ class _Render:
         """Return (select expressions, group-by columns)."""
         expressions: list[str] = []
         plain: list[str] = []
+        first_aggregate: int | None = None
         aggregates = [i for i in self.plan.select if i.agg]
         for item in self.plan.select:
             alias, name, store = self.column(item.column)
@@ -146,8 +164,18 @@ class _Render:
                 # The gateway wraps and taints untrusted text by output column name. A rename or
                 # an aggregate (max, min) would carry the text out under another name, unlabelled.
                 raise PlanError("UNTRUSTED_COLUMN", f"{ref} must be selected as is")
+            if item.negate and store.money_field(name) is None:
+                raise PlanError("BAD_NEGATE", f"{ref} is not a money column")
+            if item.round is not None and store.money_field(name) is None:
+                raise PlanError("BAD_ROUND", f"{ref} is not a money column")
             if item.agg is None:
-                expressions.append(f"{ref} AS {item.alias}" if item.alias else ref)
+                shown = f"-{ref}" if item.negate else ref
+                if item.round is not None:
+                    shown = f"ROUND({shown}, {item.round})"
+                if item.negate or item.round is not None:
+                    expressions.append(f"{shown} AS {item.alias or name}")
+                else:
+                    expressions.append(f"{ref} AS {item.alias}" if item.alias else ref)
                 plain.append(ref)
                 continue
             if item.agg != "count_distinct" and self._fans_out(alias):
@@ -157,6 +185,12 @@ class _Render:
                 if item.agg == "count_distinct"
                 else (f"{_AGGREGATES[item.agg]}({ref})")
             )
+            if item.negate:
+                inner = f"-{inner}"
+            if item.round is not None:
+                inner = f"ROUND({inner}, {item.round})"
+            if first_aggregate is None:
+                first_aggregate = len(expressions)
             expressions.append(f"{inner} AS {item.alias}" if item.alias else inner)
             money = store.money_field(name)
             if money and item.agg in _MONEY_AGGS:
@@ -167,8 +201,10 @@ class _Render:
                     and not self._pinned(alias, pins)
                     and not any(f"{alias}.{p}" in plain for p in money.pinned_by)
                 ):
-                    expressions.insert(0, split)
-                    plain.insert(0, split)
+                    # Right before the first total, so the columns read as the question did.
+                    expressions.insert(first_aggregate, split)
+                    first_aggregate += 1
+                    plain.append(split)
         return expressions, (plain if aggregates else [])
 
     def _fans_out(self, alias: str) -> bool:
@@ -232,7 +268,12 @@ def render(plan: QueryPlan, catalogue: Catalogue) -> RenderedQuery:
     expressions, group = work.select_sql()
     predicates = work.where_sql()
     order = work.order_sql()
-    primary = catalogue.store(plan.store)
+    if group:
+        # A grouped result has no natural order. Groups the plan did not order by break ties, so
+        # the same question always gives the same rows in the same order.
+        named = {part.removesuffix(" DESC") for part in order}
+        order += [g for g in dict.fromkeys(group) if g not in named]
+    primary = work.primary
     parts = [f"SELECT {', '.join(expressions)}", f"FROM {primary.store}", *work.join_sql]
     if predicates:
         parts.append("WHERE " + " AND ".join(predicates))
@@ -243,7 +284,7 @@ def render(plan: QueryPlan, catalogue: Catalogue) -> RenderedQuery:
     # One past the cap: the Query API fetches cap + 1 to learn whether the result was cut short.
     parts.append(f"LIMIT {plan.limit + 1}")
     if plan.offset:
-        if not order:
+        if not plan.order_by:
             # Without an order, rows can come back differently each time, so pages would overlap.
             raise PlanError("OFFSET_NEEDS_ORDER", "paging needs an order_by")
         parts.append(f"OFFSET {plan.offset}")

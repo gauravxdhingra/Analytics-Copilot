@@ -327,3 +327,140 @@ def test_filtering_a_different_date_than_the_plan_says_is_caught_by_the_verifier
 def test_an_unknown_date_field_name_is_refused_at_the_schema() -> None:
     with pytest.raises(ValueError, match="date_field"):
         _dated("Robert'); DROP TABLE", "booking_date")
+
+
+def test_a_store_alias_resolves_to_the_full_store_name() -> None:
+    by_alias = render(_plan(store="transactions"), CATALOGUE)
+    assert by_alias.sql == render(_plan(), CATALOGUE).sql
+
+
+def test_an_unknown_store_is_still_refused() -> None:
+    with pytest.raises(PlanError) as info:
+        render(_plan(store="payroll"), CATALOGUE)
+    assert info.value.code == "UNKNOWN_STORE"
+
+
+def test_negate_makes_an_outflow_total_a_positive_figure() -> None:
+    plan = _plan(
+        select=[{"column": "transactions.amount", "agg": "sum", "alias": "total", "negate": True}],
+        filters=[
+            {"column": "transactions.account_id", "op": "=", "values": ["A-DE-EUR-1"]},
+            {"column": "transactions.amount", "op": "<", "values": [0]},
+        ],
+    )
+    query = render(plan, CATALOGUE)
+    assert query.sql.startswith("SELECT -SUM(transactions.amount) AS total FROM")
+    VERIFIER.verify(query.sql, query.params, query.options)
+
+
+def test_negate_on_a_plain_money_column_keeps_its_name() -> None:
+    plan = _plan(
+        select=[{"column": "transactions.amount", "negate": True}],
+        filters=[{"column": "transactions.account_id", "op": "=", "values": ["A-DE-EUR-1"]}],
+    )
+    query = render(plan, CATALOGUE)
+    assert query.sql.startswith("SELECT -transactions.amount AS amount FROM")
+    VERIFIER.verify(query.sql, query.params, query.options)
+
+
+def test_negate_only_applies_to_a_money_column() -> None:
+    plan = _plan(select=[{"column": "transactions.version", "agg": "max", "negate": True}])
+    with pytest.raises(PlanError) as info:
+        render(plan, CATALOGUE)
+    assert info.value.code == "BAD_NEGATE"
+
+
+def test_the_currency_split_follows_the_requested_columns_and_precedes_the_totals() -> None:
+    plan = _plan(
+        select=[
+            {"column": "transactions.entity_id"},
+            {"column": "transactions.amount", "agg": "sum", "alias": "total"},
+        ],
+        filters=[],
+    )
+    sql = render(plan, CATALOGUE).sql
+    assert sql.startswith(
+        "SELECT transactions.entity_id, transactions.currency, SUM(transactions.amount) AS total"
+    )
+
+
+def test_round_wraps_a_money_aggregate() -> None:
+    plan = _plan(
+        select=[{"column": "transactions.amount", "agg": "avg", "alias": "average", "round": 2}]
+    )
+    query = render(plan, CATALOGUE)
+    assert query.sql.startswith("SELECT ROUND(AVG(transactions.amount), 2) AS average FROM")
+    VERIFIER.verify(query.sql, query.params, query.options)
+
+
+def test_round_is_applied_after_negate() -> None:
+    plan = _plan(
+        select=[
+            {
+                "column": "transactions.amount",
+                "agg": "sum",
+                "alias": "total",
+                "negate": True,
+                "round": 2,
+            }
+        ]
+    )
+    query = render(plan, CATALOGUE)
+    assert "ROUND(-SUM(transactions.amount), 2) AS total" in query.sql
+    VERIFIER.verify(query.sql, query.params, query.options)
+
+
+def test_round_only_applies_to_a_money_column() -> None:
+    plan = _plan(select=[{"column": "transactions.version", "agg": "max", "round": 2}])
+    with pytest.raises(PlanError) as info:
+        render(plan, CATALOGUE)
+    assert info.value.code == "BAD_ROUND"
+
+
+@pytest.mark.parametrize("bad", [-1, 7])
+def test_round_digits_are_bounded(bad: int) -> None:
+    with pytest.raises(ValueError, match="round"):
+        _plan(select=[{"column": "transactions.amount", "agg": "avg", "round": bad}])
+
+
+def test_a_grouped_query_without_an_order_is_ordered_by_its_groups() -> None:
+    plan = _plan(
+        select=[
+            {"column": "transactions.entity_id"},
+            {"column": "transactions.amount", "agg": "sum", "alias": "total"},
+        ],
+        filters=[],
+    )
+    sql = render(plan, CATALOGUE).sql
+    assert "GROUP BY transactions.entity_id, transactions.currency ORDER BY" in sql
+    assert "ORDER BY transactions.entity_id, transactions.currency LIMIT" in sql
+
+
+def test_an_explicit_order_comes_first_and_the_groups_break_ties() -> None:
+    plan = _plan(
+        select=[
+            {"column": "transactions.entity_id"},
+            {"column": "transactions.amount", "agg": "sum", "alias": "total"},
+        ],
+        filters=[],
+        order_by=[{"column": "total", "descending": True}],
+    )
+    sql = render(plan, CATALOGUE).sql
+    assert "ORDER BY total DESC, transactions.entity_id, transactions.currency LIMIT" in sql
+
+
+def test_a_partial_order_is_completed_with_the_remaining_groups() -> None:
+    plan = _plan(
+        select=[
+            {"column": "transactions.entity_id"},
+            {"column": "transactions.amount", "agg": "sum", "alias": "total"},
+        ],
+        filters=[],
+        order_by=[{"column": "transactions.entity_id", "descending": False}],
+    )
+    sql = render(plan, CATALOGUE).sql
+    assert "ORDER BY transactions.entity_id, transactions.currency LIMIT" in sql
+
+
+def test_a_plain_aggregate_has_no_order_to_add() -> None:
+    assert "ORDER BY" not in render(_plan(), CATALOGUE).sql

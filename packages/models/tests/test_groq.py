@@ -101,6 +101,12 @@ async def test_reasoning_is_kept_low_because_it_is_billed_as_output(request_: Mo
     assert wire.body()["reasoning_effort"] == "low"
 
 
+async def test_none_reasoning_effort_omits_the_field(request_: ModelRequest) -> None:
+    wire = Wire(_json(_reply()))
+    await _client(wire, reasoning_effort=None).generate(request_)
+    assert "reasoning_effort" not in wire.body()
+
+
 async def test_a_schema_becomes_structured_output(
     request_: ModelRequest, schema: dict[str, Any]
 ) -> None:

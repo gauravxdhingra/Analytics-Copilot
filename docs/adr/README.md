@@ -12,3 +12,4 @@ Backlog of decisions to write up: ARCHITECTURE.md §15. Decision table: Analytic
 | [0004](0004-engineering-stack-and-monorepo.md) | Engineering stack and monorepo layout | Proposed | CLAUDE.md Stack |
 | [0005](0005-memory-and-caching.md) | Memory and caching: per-user, user-written, and never trusted | Proposed | §10.4, D6, D8 |
 | [0006](0006-release-gates-and-budgets.md) | Release-gate thresholds and the per-question budget | Proposed | §11.5, PS:80 |
+| [0007](0007-outflows-as-positive-amounts.md) | Outflows are answered as positive amounts through an explicit plan option | Proposed | §6 QueryPlan, §11 |
